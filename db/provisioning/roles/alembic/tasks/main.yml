@@ -1,0 +1,19 @@
+---
+
+- name: install packages
+  apt: pkg={{ item }} state=latest update_cache=no
+  with_items:
+    - python-pip
+    - libpq-dev
+    - python-virtualenv
+    - virtualenvwrapper
+
+- name: install pip requirements
+  pip: requirements=/vagrant/requirements.txt
+       virtualenv=~/venv
+  become: no
+
+- name: run migrations
+  command: ~/venv/bin/alembic upgrade head chdir=/vagrant
+  environment:
+        DATABASE_URI: postgresql://{{database.username}}:{{database.password}}@localhost:5432/{{database.name}}

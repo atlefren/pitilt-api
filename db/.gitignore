@@ -1,0 +1,6 @@
+.vagrant
+*.retry
+*.log
+*.pyc
+.env
+venv

@@ -2,39 +2,39 @@ package main
 
 import (
     "github.com/gorilla/mux"
-    "fmt"
-    "log"
+    _ "github.com/lib/pq"
+    "github.com/jmoiron/sqlx"
     "time"
+    "log"
     "encoding/json"
     "net/http"
     "errors"
+    "database/sql"
 )
 
-type Measurement struct {
-    Color string
-    Timestamp string
-    Gravity int64
-    Temp float64
+type Env struct {
+    db *sqlx.DB
 }
 
-
-func readMeasurements(user int, color string) ([]Measurement, error) {
-    //TODO: get all measurements for tilt of color <color> for user id <user> sort by timestamp
-    var measurements = []Measurement{Measurement{color, "2017-03-13T23:24:13.391482", 1000, 20.00}}
-    return measurements, nil
+func readMeasurements(user string, color string, db *sqlx.DB) ([]Measurement, error) {
+    measurements := []Measurement{}
+    err := db.Select(&measurements, "SELECT color, ts, gravity, temperature FROM measurement WHERE color = $1 AND login = $2  ORDER BY ts", color, user)
+    return measurements, err
 }
 
-func readLastMeasurement(user int, color string) (Measurement, error) {
-    //TODO: get the last measurements for user and color
-    var measurement = Measurement{color, "2017-03-13T23:24:13.391482", 1000, 20.00}
-    return measurement, nil
+func readLastMeasurement(user string, color string, db *sqlx.DB) (Measurement, error) {
+    measurement := Measurement{}
+    err := db.Get(&measurement, "SELECT color, ts, gravity, temperature FROM measurement WHERE color = $1 AND login = $2 ORDER BY ts DESC LIMIT 1", color, user)
+    return measurement, err
 }
 
-func saveMeasurements(measurements []Measurement, user int) error {
-    //todo: save these measurements
+func saveMeasurements(measurements []Measurement, user string, db *sqlx.DB) error {
+    tx := db.MustBegin()
     for _, measurement := range measurements {
-        fmt.Println(measurement.Timestamp, measurement.Gravity, measurement.Temp)
+        measurement.User = user
+        tx.NamedExec("INSERT INTO measurement (color, gravity, temperature, ts, login) VALUES (:color, :gravity, :temperature, :ts, :login)", &measurement)
     }
+    tx.Commit()
     return nil
 }
 
@@ -50,17 +50,21 @@ func parseMeasurements(r *http.Request) []Measurement {
     return  measurements
 }
 
-func getUser(r *http.Request) (int, error){
+func getUser(r *http.Request, db *sqlx.DB) (string, error){
     key := r.Header.Get("X-PYTILT-KEY")
-    if (key == "YOUR_KEY") {
-        return 1, nil
+
+    var id string
+    err := db.Get(&id, "SELECT id FROM login WHERE key = $1", key)
+
+    if (err == sql.ErrNoRows) {
+        return "", errors.New("unknown key")
     }
-    return -1, errors.New("unknown key")
+    return id, err
 }
 
-func addData(w http.ResponseWriter, r *http.Request) {
+func (env *Env) addData(w http.ResponseWriter, r *http.Request) {
 
-    user, err := getUser(r)
+    user, err := getUser(r, env.db)
     if err != nil {
         http.Error(w, err.Error(), http.StatusForbidden)
         return
@@ -68,19 +72,20 @@ func addData(w http.ResponseWriter, r *http.Request) {
 
     measurements := parseMeasurements(r)
 
-    err = saveMeasurements(measurements, user)
+    err = saveMeasurements(measurements, user, env.db)
     if err != nil {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
     }
 
-    w.WriteHeader(http.StatusCreated)
+    //w.WriteHeader(http.StatusCreated)
+    w.WriteHeader(http.StatusOK)
 }
 
-func getAllData(w http.ResponseWriter, r *http.Request) {
+func (env *Env) getAllData(w http.ResponseWriter, r *http.Request) {
 
     //todo: the user should come from an OAuth token, not the key
-    user, err := getUser(r)
+    user, err := getUser(r, env.db)
 
     if err != nil {
         http.Error(w, err.Error(), http.StatusForbidden)
@@ -90,7 +95,7 @@ func getAllData(w http.ResponseWriter, r *http.Request) {
     vars := mux.Vars(r)
     color := vars["color"]
 
-    measurements, err := readMeasurements(user, color)
+    measurements, err := readMeasurements(user, color, env.db)
     if err != nil {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
@@ -105,10 +110,10 @@ func getAllData(w http.ResponseWriter, r *http.Request) {
     w.Write(jsonData)
 }
 
-func getLatestData(w http.ResponseWriter, r *http.Request) {
+func (env *Env) getLatestData(w http.ResponseWriter, r *http.Request) {
 
     //todo: the user should come from an OAuth token, not the key
-    user, err := getUser(r)
+    user, err := getUser(r, env.db)
 
     if err != nil {
         http.Error(w, err.Error(), http.StatusForbidden)
@@ -118,9 +123,13 @@ func getLatestData(w http.ResponseWriter, r *http.Request) {
     vars := mux.Vars(r)
     color := vars["color"]
 
-    measurement, err := readLastMeasurement(user, color)
+    measurement, err := readLastMeasurement(user, color, env.db)
     if err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
+        if (err == sql.ErrNoRows) {
+            http.Error(w, "Color not found", http.StatusNotFound)
+        } else {
+            http.Error(w, err.Error(), http.StatusInternalServerError)
+        }
         return
     }
 
@@ -134,14 +143,21 @@ func getLatestData(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+    var err error
+    db, err := sqlx.Open("postgres", "postgres://dvh2user:pass@localhost:15432/dvh2")
+    if err != nil {
+        log.Fatalln(err)
+    }
+    env := &Env{db: db}
+
 
     //TODO Add CORS support
     r := mux.NewRouter()
 
     //todo: add route that lets a new oauth token generate a key
-    r.HandleFunc("/", http.HandlerFunc(addData)).Methods("POST")
-    r.HandleFunc("/data/all/{color}", http.HandlerFunc(getAllData)).Methods("GET")
-    r.HandleFunc("/data/latest/{color}", http.HandlerFunc(getLatestData)).Methods("GET")
+    r.HandleFunc("/", http.HandlerFunc(env.addData)).Methods("POST")
+    r.HandleFunc("/data/all/{color}", http.HandlerFunc(env.getAllData)).Methods("GET")
+    r.HandleFunc("/data/latest/{color}", http.HandlerFunc(env.getLatestData)).Methods("GET")
 
 
     s := &http.Server{
