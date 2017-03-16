@@ -26,9 +26,9 @@ def upgrade():
             key varchar(255)
         );
     ''')
-    op.execute('''
-        INSERT INTO login (id, first_name, last_name, email, key) VALUES ('1', 'Atle', 'Sveen', 'atle@frenviksveen.net', 'YOUR_KEY')
-    ''')
+    #op.execute('''
+    #    INSERT INTO login (id, first_name, last_name, email, key) VALUES ('1', 'Atle', 'Sveen', 'atle@frenviksveen.net', 'YOUR_KEY')
+    #''')
     op.execute('''
         ALTER TABLE measurement ADD COLUMN login varchar(255) REFERENCES login (id);
     ''')

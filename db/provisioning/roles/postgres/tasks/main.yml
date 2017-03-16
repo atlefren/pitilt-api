@@ -13,23 +13,6 @@
     - postgresql-9.6
     - python-psycopg2
 
-- name: set listen host
-  become: true
-  become_user: postgres
-  lineinfile: destfile=/etc/postgresql/9.6/main/postgresql.conf
-              regexp="^#listen_addresses = 'localhost'"
-              line="listen_addresses = '*'"
-              state=present
-
-- name: open ports
-  become: true
-  become_user: postgres
-  lineinfile: destfile=/etc/postgresql/9.6/main/pg_hba.conf
-              regexp=''
-              insertafter=EOF
-              line='host    all             all             all                     md5'
-              state=present
-
 - name: create postgresql database
   become: true
   become_user: postgres

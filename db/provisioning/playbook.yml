@@ -2,9 +2,21 @@
 - hosts: development
   become: true
   roles:
-    #- role: setup
-    #  tags: setup
-    #- role: postgres
-    #  tags: postgres
+    - role: setup
+      tags: setup
+    - role: postgres
+      tags: postgres
+    - role: alembic
+      tags: alembic
+    - role: dev
+      tags: dev
+
+- hosts: production
+  become: true
+  roles:
+    - role: setup
+      tags: setup
+    - role: postgres
+      tags: postgres
     - role: alembic
       tags: alembic
