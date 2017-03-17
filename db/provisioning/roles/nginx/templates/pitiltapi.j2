@@ -1,0 +1,9 @@
+server {
+    listen 80;
+    client_max_body_size 20M;
+
+    location / {
+        return 200 "hello world";
+    }
+
+}

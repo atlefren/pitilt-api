@@ -7,13 +7,30 @@
     - libpq-dev
     - python-virtualenv
     - virtualenvwrapper
+    - git
+
+- name: create /opt/alembic
+  file: path=/opt/alembic state=directory
+
+- name: copy requirements.txt
+  copy: src=requirements.txt
+        dest=/opt/alembic/requirements.txt
 
 - name: install pip requirements
-  pip: requirements=/vagrant/requirements.txt
-       virtualenv=~/venv
-  become: no
+  pip: requirements=/opt/alembic/requirements.txt
+       virtualenv=/opt/alembic/venv
 
+- name: clone repo from github
+  git: repo=https://github.com/atlefren/pitilt-api.git
+       dest=/opt/alembic/code
+       version=master
+       accept_hostkey=True
+  tags:
+    - migrate
+  
 - name: run migrations
-  command: ~/venv/bin/alembic upgrade head chdir=/vagrant
+  command: /opt/alembic/venv/bin/alembic upgrade head chdir=/opt/alembic/code/db
   environment:
         DATABASE_URI: postgresql://{{database.username}}:{{database.password}}@localhost:5432/{{database.name}}
+  tags:
+    - migrate

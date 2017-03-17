@@ -19,8 +19,3 @@
 
   - name: make sure ntp is running
     service: name=ntp state=running enabled=yes
-
-#  - name: get postgis role from galaxy
-#    command: ansible-galaxy install azavea.postgis
-#    args:
-#      creates: /etc/ansible/roles/azavea.postgresql

@@ -4,11 +4,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -109,6 +111,10 @@ func (env *Env) getAllData(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonData)
 }
 
+func hello(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Pitilt :)")
+}
+
 func (env *Env) getLatestData(w http.ResponseWriter, r *http.Request) {
 
 	//todo: the user should come from an OAuth token, not the key
@@ -143,7 +149,13 @@ func (env *Env) getLatestData(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	var err error
-	db, err := sqlx.Open("postgres", "postgres://dvh2user:pass@localhost:15432/dvh2")
+
+	var dbUri = os.Getenv("DATABASE_URI")
+	if dbUri == "" {
+		dbUri = "postgres://dvh2user:pass@localhost:15432/dvh2"
+	}
+
+	db, err := sqlx.Open("postgres", dbUri)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -154,6 +166,7 @@ func main() {
 
 	//todo: add route that lets a new oauth token generate a key
 	r.HandleFunc("/", http.HandlerFunc(env.addData)).Methods("POST")
+	r.HandleFunc("/", http.HandlerFunc(hello)).Methods("GET")
 	r.HandleFunc("/data/all/{color}", http.HandlerFunc(env.getAllData)).Methods("GET")
 	r.HandleFunc("/data/latest/{color}", http.HandlerFunc(env.getLatestData)).Methods("GET")
 

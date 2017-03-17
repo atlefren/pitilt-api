@@ -1,0 +1,34 @@
+---
+- name: create app dir
+  file: path=/opt/pitilt-api
+        state=directory
+        owner=www-data
+        group=www-data
+
+- name: copy app
+  copy: src=pitilt-api
+        dest=/opt/pitilt-api/pitilt-api
+        owner=www-data
+        group=www-data
+        mode=g+x
+  tags:
+    - deploy_lite
+
+- name: copy systemd file
+  template: src=pitiltapi.service.j2
+            dest=/etc/systemd/system/pitiltapi.service
+            owner=root
+            mode=644
+  notify:
+    - reload systemd
+
+- name: Enable systemd service
+  service:
+    name: pitiltapi
+    enabled: True
+    use: service
+
+- name: start service
+  systemd: state=restarted name=pitiltapi daemon_reload=yes
+  tags:
+    - deploy_lite

@@ -1,0 +1,16 @@
+[Unit]
+Description=Pitilt API
+After=multi-user.target
+
+[Service]
+Type=idle
+Environment=DATABASE_URI=postgres://{{database.username}}:{{database.password}}@localhost:5432/{{database.name}}
+ExecStart=/bin/bash -c '/opt/pitilt-api/pitilt-api'
+WorkingDirectory=/opt/pitilt-api
+Restart=always
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=pitiltapi
+
+[Install]
+WantedBy=multi-user.target

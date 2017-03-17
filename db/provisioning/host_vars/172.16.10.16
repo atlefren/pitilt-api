@@ -2,4 +2,4 @@
   database:
     name: tilt
     username: tilt
-    password: pass
+    password: password

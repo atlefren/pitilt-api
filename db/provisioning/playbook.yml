@@ -20,3 +20,7 @@
       tags: postgres
     - role: alembic
       tags: alembic
+    - role: nginx
+      tags: nginx
+    - role: deploy
+      tags: deploy
