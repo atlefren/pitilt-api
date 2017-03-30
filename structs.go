@@ -85,9 +85,10 @@ type Measurement struct {
 }
 
 type Instrument struct {
-	Id   int    `db:"id" json:"id"`
+	Id   int    `db:"id" json:"-"`
 	Name string `db:"name" json:"name"`
 	Type string `db:"type" json:"type"`
+	Plot int    `db:"plot" json:"-"`
 }
 
 type Plot struct {
@@ -96,4 +97,9 @@ type Plot struct {
 	StartTime   time.Time    `db:"start_time" json:"startTime"`
 	EndTime     NullTime     `db:"end_time" json:"endTime"`
 	Instruments []Instrument `json:"instruments,omitempty"`
+	Login       string       `db:"login" json:"_,omitempty"`
+}
+
+type User struct {
+	Key string `json:"key"`
 }
