@@ -69,7 +69,7 @@ func (nt NullTime) Value() (driver.Value, error) {
 	return nt.Time, nil
 }
 
-func (nt *NullTime) MarshalJSON() ([]byte, error) {
+func (nt NullTime) MarshalJSON() ([]byte, error) {
 	if !nt.Valid {
 		return json.Marshal(nil)
 	}
@@ -85,7 +85,7 @@ type Measurement struct {
 }
 
 type Instrument struct {
-	id   int    `db:"id" json:"id"`
+	Id   int    `db:"id" json:"id"`
 	Name string `db:"name" json:"name"`
 	Type string `db:"type" json:"type"`
 }

@@ -21,7 +21,7 @@ def send_measurement(name, value, name2, value2):
             'timestamp': int(time.time())
         }
     ]
-    r = requests.post('%s/data' % URL, data=json.dumps(data), headers={'X-PYTILT-KEY': KEY})
+    r = requests.post('%s/measurements/' % URL, data=json.dumps(data), headers={'X-PYTILT-KEY': KEY})
     print r
 
 

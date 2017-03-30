@@ -206,6 +206,30 @@ func (env *Env) getPlots(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonData)
 }
 
+func (env *Env) getPlot(w http.ResponseWriter, r *http.Request) {
+
+	user := getUser(r)
+	vars := mux.Vars(r)
+	plotId, err := strconv.Atoi(vars["plotId"])
+
+	plot, err := env.db.getPlot(plotId, user)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Plot not found", http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	instruments, err := env.db.getInstruments(plotId)
+	plot.Instruments = instruments
+
+	jsonData, err := json.Marshal(plot)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonData)
+}
+
 func hello(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Pitilt :)\n")
 }
@@ -262,6 +286,7 @@ func main() {
 	handle(r, "GET", "/plots/{plotId}/data/hourly/", env.getHourlyData, nil)
 
 	handle(r, "GET", "/plots/", env.getPlots, nil)
+	handle(r, "GET", "/plots/{plotId}", env.getPlot, nil)
 
 	//setup CORS-handling
 	corsObj := handlers.AllowedOrigins([]string{"*"})
