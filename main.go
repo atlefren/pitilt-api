@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"github.com/auth0/go-jwt-middleware"
 	"github.com/dgrijalva/jwt-go"
-	"github.com/gorilla/context"
+	//	"github.com/gorilla/context"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
@@ -23,8 +23,28 @@ import (
 	"time"
 )
 
-type Env struct {
-	db *Database
+var myClient = &http.Client{Timeout: 10 * time.Second}
+
+func getKey(kid string) (*rsa.PublicKey, error) {
+	r, err := myClient.Get("https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com")
+	if err != nil {
+		return nil, err
+	}
+	//TODO:
+	// Use the value of max-age in the Cache-Control header of the response from that endpoint to know when to refresh the public keys.
+
+	decoder := json.NewDecoder(r.Body)
+	personMap := make(map[string]interface{})
+	err = decoder.Decode(&personMap)
+	if err != nil {
+		return nil, err
+	}
+
+	block, _ := pem.Decode([]byte(personMap[kid].(string)))
+	var cert *x509.Certificate
+	cert, _ = x509.ParseCertificate(block.Bytes)
+	rsaPublicKey := cert.PublicKey.(*rsa.PublicKey)
+	return rsaPublicKey, nil
 }
 
 func parseMeasurements(r *http.Request) []Measurement {
@@ -36,27 +56,6 @@ func parseMeasurements(r *http.Request) []Measurement {
 	}
 	defer r.Body.Close()
 	return measurements
-}
-
-func (env *Env) addData(w http.ResponseWriter, r *http.Request) {
-
-	user := context.Get(r, "user").(string)
-	fmt.Println(user)
-	measurements := parseMeasurements(r)
-
-	for _, measurement := range measurements {
-		fmt.Println(measurement.Name)
-		fmt.Println(measurement.Value)
-		fmt.Println(measurement.Type)
-		fmt.Println(measurement.Timestamp.Time)
-		fmt.Println("----")
-	}
-	err := env.db.saveMeasurements(measurements, user)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusCreated)
 }
 
 func mapMeasurements(measurements []Measurement) []PlotData {
@@ -83,10 +82,30 @@ func mapMeasurements(measurements []Measurement) []PlotData {
 	return plots
 }
 
+func getUser(r *http.Request) string {
+	//return context.Get(r, "user").(string)
+	return "1"
+
+}
+
+type Env struct {
+	db *Database
+}
+
+func (env *Env) addMeasurements(w http.ResponseWriter, r *http.Request) {
+	user := getUser(r)
+	measurements := parseMeasurements(r)
+	err := env.db.saveMeasurements(measurements, user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
 func (env *Env) getAllData(w http.ResponseWriter, r *http.Request) {
 
-	//user := context.Get(r, "user").(string)
-	user := "1"
+	user := getUser(r)
 
 	vars := mux.Vars(r)
 	plotId, err := strconv.Atoi(vars["plotId"])
@@ -115,8 +134,7 @@ func (env *Env) getAllData(w http.ResponseWriter, r *http.Request) {
 
 func (env *Env) getHourlyData(w http.ResponseWriter, r *http.Request) {
 
-	//user := context.Get(r, "user").(string)
-	user := "1"
+	user := getUser(r)
 
 	vars := mux.Vars(r)
 	plotId, err := strconv.Atoi(vars["plotId"])
@@ -143,8 +161,7 @@ func (env *Env) getHourlyData(w http.ResponseWriter, r *http.Request) {
 }
 
 func (env *Env) getLatestData(w http.ResponseWriter, r *http.Request) {
-	//user := context.Get(r, "user").(string)
-	user := "1"
+	user := getUser(r)
 
 	vars := mux.Vars(r)
 	plotId, err := strconv.Atoi(vars["plotId"])
@@ -175,32 +192,22 @@ func (env *Env) getLatestData(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonData)
 }
 
-func hello(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Pitilt :)\n")
+func (env *Env) getPlots(w http.ResponseWriter, r *http.Request) {
+
+	user := getUser(r)
+
+	plots, err := env.db.getPlots(user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonData, err := json.Marshal(plots)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonData)
 }
 
-var myClient = &http.Client{Timeout: 10 * time.Second}
-
-func getKey(kid string) (*rsa.PublicKey, error) {
-	r, err := myClient.Get("https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com")
-	if err != nil {
-		return nil, err
-	}
-	//TODO:
-	// Use the value of max-age in the Cache-Control header of the response from that endpoint to know when to refresh the public keys.
-
-	decoder := json.NewDecoder(r.Body)
-	personMap := make(map[string]interface{})
-	err = decoder.Decode(&personMap)
-	if err != nil {
-		return nil, err
-	}
-
-	block, _ := pem.Decode([]byte(personMap[kid].(string)))
-	var cert *x509.Certificate
-	cert, _ = x509.ParseCertificate(block.Bytes)
-	rsaPublicKey := cert.PublicKey.(*rsa.PublicKey)
-	return rsaPublicKey, nil
+func hello(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Pitilt :)\n")
 }
 
 func handle(r *mux.Router, method string, path string, handlerFunc func(w http.ResponseWriter, r *http.Request), middleware func(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc)) {
@@ -249,10 +256,12 @@ func main() {
 
 	//define routes
 	handle(r, "GET", "/", hello, nil)
-	handle(r, "POST", "/data", env.addData, securityHandler.KeyCheckHandler)
-	handle(r, "GET", "/plot/{plotId}/data/all", env.getAllData, nil)
-	handle(r, "GET", "/plot/{plotId}/data/latest", env.getLatestData, nil)
-	handle(r, "GET", "/plot/{plotId}/data/hourly", env.getHourlyData, nil)
+	handle(r, "POST", "/measurements/", env.addMeasurements, securityHandler.KeyCheckHandler)
+	handle(r, "GET", "/plots/{plotId}/data/all/", env.getAllData, nil)
+	handle(r, "GET", "/plots/{plotId}/data/latest/", env.getLatestData, nil)
+	handle(r, "GET", "/plots/{plotId}/data/hourly/", env.getHourlyData, nil)
+
+	handle(r, "GET", "/plots/", env.getPlots, nil)
 
 	//setup CORS-handling
 	corsObj := handlers.AllowedOrigins([]string{"*"})

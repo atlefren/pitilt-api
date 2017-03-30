@@ -183,6 +183,20 @@ func (db *Database) saveMeasurements(measurements []Measurement, user string) er
 	return nil
 }
 
+func (db *Database) getPlots(user string) ([]Plot, error) {
+	plots := []Plot{}
+
+	var sql = `
+        SELECT id, start_time, end_time, name
+        FROM plot
+        WHERE login = $1
+        ORDER BY start_time DESC
+    `
+
+	err := db.db.Select(&plots, sql, user)
+	return plots, err
+}
+
 func (db *Database) getUser(r *http.Request) (string, error) {
 	key := r.Header.Get("X-PYTILT-KEY")
 	fmt.Println(key)
