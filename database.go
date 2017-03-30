@@ -13,6 +13,7 @@ type Database struct {
 	db *sqlx.DB
 }
 
+/*
 func (db *Database) readMeasurements(user string, color string) ([]Measurement, error) {
 	measurements := []Measurement{}
 
@@ -75,9 +76,114 @@ func (db *Database) saveMeasurements(measurements []Measurement, user string) er
 	tx.Commit()
 	return nil
 }
+*/
+func (db *Database) readDataFromPlot(user string, plotId int) ([]Measurement, error) {
+	measurements := []Measurement{}
+	var sql = `
+        WITH instruments as (
+            SELECT name FROM
+            instrument
+            WHERE plot = $1
+        )
+        SELECT m.name, m.type, m.value, m.timestamp 
+        FROM measurement m, plot p 
+        WHERE m.timestamp >= p.start_time 
+        AND(p.end_time is null OR m.timestamp <= p.end_time) 
+        AND m.name IN (SELECT name from instruments)
+        AND p.id = $1
+        AND p.login = $2
+        ORDER BY m.timestamp;
+    `
+	err := db.db.Select(&measurements, sql, plotId, user)
+	return measurements, err
+}
+
+func (db *Database) readLatestDataFromPlot(user string, plotId int) ([]Measurement, error) {
+	measurements := []Measurement{}
+	var sql = `
+        WITH 
+        instruments as (
+            SELECT i.name AS names
+            FROM instrument i
+            WHERE plot = $1
+        ),
+        latest_measurement as (
+    
+            SELECT max(m.timestamp) as timestamp
+            FROM measurement m, plot p 
+            WHERE m.timestamp >= p.start_time 
+            AND(p.end_time is null OR m.timestamp <= p.end_time) 
+            AND p.id = $1
+        )
+        SELECT m.name, m.type, m.value, m.timestamp 
+        FROM measurement m, plot p 
+        WHERE m.timestamp >= p.start_time 
+        and m.timestamp = (select timestamp from latest_measurement)
+        AND m.name IN (SELECT i.names from instruments i)
+        AND p.id = 3
+        AND p.login = $2
+        ORDER BY m.timestamp;
+    `
+	err := db.db.Select(&measurements, sql, plotId, user)
+	return measurements, err
+}
+
+func (db *Database) readHourlyDataFromPlot(user string, plotId int) ([]Measurement, error) {
+	measurements := []Measurement{}
+	var sql = `
+        WITH instruments as (
+            SELECT name AS names 
+            FROM instrument 
+            WHERE plot = $1
+        )
+        SELECT
+            m.name,
+            m.type,
+            round(cast(avg(value) as numeric),0) AS value,
+            m.timestamp::date::timestamp + make_interval(hours => DATE_PART('HOUR', m.timestamp)::integer) as timestamp 
+        FROM measurement m, plot p 
+        WHERE m.timestamp >= p.start_time 
+        AND m.name IN (SELECT i.names from instruments i)
+        AND p.id = 3
+        AND p.login = $2
+        GROUP BY m.name, m.type, timestamp
+        ORDER BY timestamp;
+    `
+	err := db.db.Select(&measurements, sql, plotId, user)
+	return measurements, err
+}
+
+func (db *Database) readMeasurements(user string, name string) ([]Measurement, error) {
+	measurements := []Measurement{}
+
+	var sql = `
+        SELECT name, type, value, timestamp
+        FROM measurement
+        WHERE name = $1
+        AND login = $2
+        ORDER BY timestamp
+    `
+
+	err := db.db.Select(&measurements, sql, name, user)
+	return measurements, err
+}
+
+func (db *Database) saveMeasurements(measurements []Measurement, user string) error {
+	tx := db.db.MustBegin()
+	var sql = `
+        INSERT INTO measurement (name, type, value, timestamp, login)
+        VALUES (:name, :type, :value, :timestamp, :login)
+    `
+	for _, measurement := range measurements {
+		measurement.Login = user
+		tx.NamedExec(sql, &measurement)
+	}
+	a := tx.Commit()
+	fmt.Println(a)
+	return nil
+}
 
 func (db *Database) getUser(r *http.Request) (string, error) {
-	fmt.Println("?")
 	key := r.Header.Get("X-PYTILT-KEY")
 	fmt.Println(key)
 	return db.getUserForKey(key)

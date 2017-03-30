@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/auth0/go-jwt-middleware"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/context"

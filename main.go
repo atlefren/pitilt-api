@@ -18,6 +18,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
+	"strconv"
 	"time"
 )
 
@@ -39,32 +41,70 @@ func parseMeasurements(r *http.Request) []Measurement {
 func (env *Env) addData(w http.ResponseWriter, r *http.Request) {
 
 	user := context.Get(r, "user").(string)
+	fmt.Println(user)
 	measurements := parseMeasurements(r)
 
+	for _, measurement := range measurements {
+		fmt.Println(measurement.Name)
+		fmt.Println(measurement.Value)
+		fmt.Println(measurement.Type)
+		fmt.Println(measurement.Timestamp.Time)
+		fmt.Println("----")
+	}
 	err := env.db.saveMeasurements(measurements, user)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.WriteHeader(http.StatusCreated)
+}
 
-	//w.WriteHeader(http.StatusCreated)
-	w.WriteHeader(http.StatusOK)
+func mapMeasurements(measurements []Measurement) []PlotData {
+	dates := make(map[time.Time]PlotData)
+	for _, measurement := range measurements {
+		_, ok := dates[measurement.Timestamp.Time]
+		if !ok {
+			values := make(map[string]float64)
+			plot := PlotData{Date: measurement.Timestamp.Time, Values: values}
+			dates[measurement.Timestamp.Time] = plot
+		}
+		plot, ok := dates[measurement.Timestamp.Time]
+		plot.Values[measurement.Name] = measurement.Value
+	}
+
+	var plots = []PlotData{}
+	for _, plot := range dates {
+		plots = append(plots, plot)
+	}
+
+	sort.Slice(plots, func(i, j int) bool {
+		return plots[i].Date.Sub(plots[j].Date) < 0
+	})
+	return plots
 }
 
 func (env *Env) getAllData(w http.ResponseWriter, r *http.Request) {
 
-	user := context.Get(r, "user").(string)
+	//user := context.Get(r, "user").(string)
+	user := "1"
 
 	vars := mux.Vars(r)
-	color := vars["color"]
+	plotId, err := strconv.Atoi(vars["plotId"])
 
-	measurements, err := env.db.readMeasurements(user, color)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	jsonData, err := json.Marshal(measurements)
+	measurements, err := env.db.readDataFromPlot(user, plotId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	plots := mapMeasurements(measurements)
+
+	jsonData, err := json.Marshal(plots)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -75,18 +115,25 @@ func (env *Env) getAllData(w http.ResponseWriter, r *http.Request) {
 
 func (env *Env) getHourlyData(w http.ResponseWriter, r *http.Request) {
 
-	user := context.Get(r, "user").(string)
+	//user := context.Get(r, "user").(string)
+	user := "1"
 
 	vars := mux.Vars(r)
-	color := vars["color"]
+	plotId, err := strconv.Atoi(vars["plotId"])
 
-	measurements, err := env.db.readHourlyMeasurements(user, color)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	jsonData, err := json.Marshal(measurements)
+	measurements, err := env.db.readHourlyDataFromPlot(user, plotId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	plots := mapMeasurements(measurements)
+	jsonData, err := json.Marshal(plots)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -96,12 +143,18 @@ func (env *Env) getHourlyData(w http.ResponseWriter, r *http.Request) {
 }
 
 func (env *Env) getLatestData(w http.ResponseWriter, r *http.Request) {
-	user := context.Get(r, "user").(string)
+	//user := context.Get(r, "user").(string)
+	user := "1"
 
 	vars := mux.Vars(r)
-	color := vars["color"]
+	plotId, err := strconv.Atoi(vars["plotId"])
 
-	measurement, err := env.db.readLastMeasurement(user, color)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	measurements, err := env.db.readLatestDataFromPlot(user, plotId)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Color not found", http.StatusNotFound)
@@ -111,7 +164,9 @@ func (env *Env) getLatestData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonData, err := json.Marshal(measurement)
+	plots := mapMeasurements(measurements)
+
+	jsonData, err := json.Marshal(plots[0])
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -167,7 +222,7 @@ func main() {
 	//setup database
 	var dbUri = os.Getenv("DATABASE_URI")
 	if dbUri == "" {
-		dbUri = "postgres://dvh2user:pass@localhost:15432/dvh2"
+		dbUri = "postgres://postgres:nisse@localhost:5433/pitilt?sslmode=disable"
 	}
 
 	db, err := sqlx.Open("postgres", dbUri)
@@ -194,10 +249,10 @@ func main() {
 
 	//define routes
 	handle(r, "GET", "/", hello, nil)
-	handle(r, "POST", "/", env.addData, securityHandler.KeyCheckHandler)
-	handle(r, "GET", "/data/latest/{color}", env.getLatestData, securityHandler.JwtCheckHandler)
-	handle(r, "GET", "/data/hourly/{color}", env.getHourlyData, securityHandler.JwtCheckHandler)
-	handle(r, "GET", "/data/all/{color}", env.getAllData, securityHandler.JwtCheckHandler)
+	handle(r, "POST", "/data", env.addData, securityHandler.KeyCheckHandler)
+	handle(r, "GET", "/plot/{plotId}/data/all", env.getAllData, nil)
+	handle(r, "GET", "/plot/{plotId}/data/latest", env.getLatestData, nil)
+	handle(r, "GET", "/plot/{plotId}/data/hourly", env.getHourlyData, nil)
 
 	//setup CORS-handling
 	corsObj := handlers.AllowedOrigins([]string{"*"})

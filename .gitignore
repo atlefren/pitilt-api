@@ -1,2 +1,3 @@
 db/provisioning/host_vars/pitilt
 db/provisioning/roles/deploy/files/pitilt-api
+*.exe
