@@ -253,7 +253,7 @@ func main() {
 	//setup database
 	var dbUri = os.Getenv("DATABASE_URI")
 	if dbUri == "" {
-		dbUri = "postgres://postgres:nisse@localhost:5433/pitilt?sslmode=disable"
+		dbUri = "postgres://tilt:password@localhost:15432/tilt"
 	}
 
 	db, err := sqlx.Open("postgres", dbUri)
@@ -281,12 +281,12 @@ func main() {
 	//define routes
 	handle(r, "GET", "/", hello, nil)
 	handle(r, "POST", "/measurements/", env.addMeasurements, securityHandler.KeyCheckHandler)
-	handle(r, "GET", "/plots/{plotId}/data/all/", env.getAllData, nil)
-	handle(r, "GET", "/plots/{plotId}/data/latest/", env.getLatestData, nil)
-	handle(r, "GET", "/plots/{plotId}/data/hourly/", env.getHourlyData, nil)
+	handle(r, "GET", "/plots/{plotId}/data/all/", env.getAllData, securityHandler.KeyCheckHandler)
+	handle(r, "GET", "/plots/{plotId}/data/latest/", env.getLatestData, securityHandler.KeyCheckHandler)
+	handle(r, "GET", "/plots/{plotId}/data/hourly/", env.getHourlyData, securityHandler.KeyCheckHandler)
 
-	handle(r, "GET", "/plots/", env.getPlots, nil)
-	handle(r, "GET", "/plots/{plotId}", env.getPlot, nil)
+	handle(r, "GET", "/plots/", env.getPlots, securityHandler.JwtCheckHandler)
+	handle(r, "GET", "/plots/{plotId}", env.getPlot, securityHandler.JwtCheckHandler)
 
 	//setup CORS-handling
 	corsObj := handlers.AllowedOrigins([]string{"*"})

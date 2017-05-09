@@ -114,7 +114,10 @@ func (db *Database) saveMeasurements(measurements []Measurement, user string) er
 		measurement.Login = user
 		tx.NamedExec(sql, &measurement)
 	}
-	a := tx.Commit()
+	err := tx.Commit()
+    if err != nil {
+        return err
+    }
 	return nil
 }
 
