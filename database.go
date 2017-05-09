@@ -3,7 +3,7 @@ package main
 import (
 	"database/sql"
 	"errors"
-	"fmt"
+	//"fmt"
 	"github.com/jmoiron/sqlx"
 	"github.com/pborman/uuid"
 	"net/http"
@@ -114,10 +114,11 @@ func (db *Database) saveMeasurements(measurements []Measurement, user string) er
 		measurement.Login = user
 		tx.NamedExec(sql, &measurement)
 	}
+
 	err := tx.Commit()
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -162,9 +163,38 @@ func (db *Database) getPlot(id int, user string) (Plot, error) {
 	return plot, err
 }
 
+func (db *Database) savePlot(plot Plot, user string) (Plot, error) {
+
+	plot.Login = user
+
+	var sql = `
+        INSERT INTO plot (start_time, end_time, name, login) VALUES (:start_time, :end_time, :name, :login) RETURNING id
+    `
+	var id int
+	rows, err := db.db.NamedQuery(sql, plot)
+	if err != nil {
+		return plot, err
+	}
+	if rows.Next() {
+		rows.Scan(&id)
+	}
+	plot.Id = id
+	tx := db.db.MustBegin()
+
+	var sql2 = `
+        INSERT INTO instrument (name, type, plot)
+        VALUES (:name, :type, :plot)
+    `
+	for _, instrument := range plot.Instruments {
+		instrument.Plot = plot.Id
+		tx.NamedExec(sql2, &instrument)
+	}
+	tx.Commit()
+	return plot, err
+}
+
 func (db *Database) getUser(r *http.Request) (string, error) {
 	key := r.Header.Get("X-PYTILT-KEY")
-	fmt.Println(key)
 	return db.getUserForKey(key)
 }
 
@@ -176,6 +206,16 @@ func (db *Database) getUserForKey(key string) (string, error) {
 		return "", errors.New("unknown key")
 	}
 	return id, err
+}
+
+func (db *Database) getkeyForUser(user string) (string, error) {
+	var key string
+	err := db.db.Get(&key, "SELECT key FROM login WHERE id = $1", user)
+
+	if err == sql.ErrNoRows {
+		return "", errors.New("unknown user")
+	}
+	return key, err
 }
 
 func (db *Database) userExists(id string) (bool, error) {

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"github.com/auth0/go-jwt-middleware"
 	"github.com/dgrijalva/jwt-go"
-	//	"github.com/gorilla/context"
+	"github.com/gorilla/context"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
@@ -83,8 +83,8 @@ func mapMeasurements(measurements []Measurement) []PlotData {
 }
 
 func getUser(r *http.Request) string {
-	//return context.Get(r, "user").(string)
-	return "1"
+	return context.Get(r, "user").(string)
+	//return "CzWRnH3U5TUV4CLFniC4NfMyYlC3"
 
 }
 
@@ -230,6 +230,54 @@ func (env *Env) getPlot(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonData)
 }
 
+func parsePlot(r *http.Request) (Plot, error) {
+
+	decoder := json.NewDecoder(r.Body)
+	var plot Plot
+	err := decoder.Decode(&plot)
+	if err != nil {
+		return Plot{}, err
+	}
+	defer r.Body.Close()
+	return plot, nil
+}
+
+func (env *Env) addPlot(w http.ResponseWriter, r *http.Request) {
+
+	user := getUser(r)
+
+	plot, err := parsePlot(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	updated_plot, err := env.db.savePlot(plot, user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonData, _ := json.Marshal(updated_plot)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	w.Write(jsonData)
+
+}
+
+func (env *Env) getKey(w http.ResponseWriter, r *http.Request) {
+	userId := getUser(r)
+	key, err := env.db.getkeyForUser(userId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	user := User{Key: key}
+	jsonData, _ := json.Marshal(user)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
+}
+
 func hello(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Pitilt :)\n")
 }
@@ -281,12 +329,15 @@ func main() {
 	//define routes
 	handle(r, "GET", "/", hello, nil)
 	handle(r, "POST", "/measurements/", env.addMeasurements, securityHandler.KeyCheckHandler)
-	handle(r, "GET", "/plots/{plotId}/data/all/", env.getAllData, securityHandler.KeyCheckHandler)
-	handle(r, "GET", "/plots/{plotId}/data/latest/", env.getLatestData, securityHandler.KeyCheckHandler)
-	handle(r, "GET", "/plots/{plotId}/data/hourly/", env.getHourlyData, securityHandler.KeyCheckHandler)
+
+	handle(r, "GET", "/plots/{plotId}/data/all/", env.getAllData, securityHandler.JwtCheckHandler)
+	handle(r, "GET", "/plots/{plotId}/data/latest/", env.getLatestData, securityHandler.JwtCheckHandler)
+	handle(r, "GET", "/plots/{plotId}/data/hourly/", env.getHourlyData, securityHandler.JwtCheckHandler)
 
 	handle(r, "GET", "/plots/", env.getPlots, securityHandler.JwtCheckHandler)
 	handle(r, "GET", "/plots/{plotId}", env.getPlot, securityHandler.JwtCheckHandler)
+
+	handle(r, "POST", "/plots/", env.addPlot, securityHandler.JwtCheckHandler)
 
 	//setup CORS-handling
 	corsObj := handlers.AllowedOrigins([]string{"*"})
