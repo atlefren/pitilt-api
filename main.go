@@ -7,17 +7,18 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	log "github.com/Sirupsen/logrus"
 	"github.com/auth0/go-jwt-middleware"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/context"
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"github.com/meatballhat/negroni-logrus"
 	"github.com/patrickmn/go-cache"
 	"github.com/pquerna/cachecontrol"
 	"github.com/rs/cors"
 	"github.com/urfave/negroni"
-	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -31,9 +32,9 @@ var myCache = cache.New(5*time.Hour, 10*time.Minute)
 func getKey(kid string) (*rsa.PublicKey, error) {
 	pemData, found := myCache.Get(kid)
 	if found {
-		log.Printf("Public key found in cache: %s", kid)
+		log.WithFields(log.Fields{"id": kid}).Info("Public key found in cache")
 	} else {
-		log.Printf("No public key found in cache: %s", kid)
+		log.WithFields(log.Fields{"id": kid}).Info("No public key found in cache")
 
 		// Get the new public keys (pem data) from google
 		req, _ := http.NewRequest("GET", "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com", nil)
@@ -54,7 +55,7 @@ func getKey(kid string) (*rsa.PublicKey, error) {
 		reasons, expires, _ := cachecontrol.CachableResponse(req, res, cachecontrol.Options{})
 		if len(reasons) == 0 {
 			timeUntilExpiration := time.Until(expires)
-			log.Println("Caching public keys for: ", timeUntilExpiration)
+			log.WithFields(log.Fields{"timeUntilExpiry": timeUntilExpiration}).Info("Caching publice keys")
 
 			// Save all the identities
 			for id, publicKeyData := range personMap {
@@ -376,6 +377,7 @@ func main() {
 	})
 
 	n := negroni.New()
+	n.Use(negronilogrus.NewMiddleware())
 	n.Use(c)
 	n.UseHandler(router)
 
