@@ -14,6 +14,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"github.com/patrickmn/go-cache"
+	"github.com/pquerna/cachecontrol"
 	"github.com/urfave/negroni"
 	"log"
 	"net/http"
@@ -24,23 +26,48 @@ import (
 )
 
 var myClient = &http.Client{Timeout: 10 * time.Second}
+var myCache = cache.New(5*time.Hour, 10*time.Minute)
 
 func getKey(kid string) (*rsa.PublicKey, error) {
-	r, err := myClient.Get("https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com")
-	if err != nil {
-		return nil, err
-	}
-	//TODO:
-	// Use the value of max-age in the Cache-Control header of the response from that endpoint to know when to refresh the public keys.
+	pemData, found := myCache.Get(kid)
+	if found {
+		log.Printf("Public key found in cache: %s", kid)
+	} else {
+		log.Printf("No public key found in cache: %s", kid)
 
-	decoder := json.NewDecoder(r.Body)
-	personMap := make(map[string]interface{})
-	err = decoder.Decode(&personMap)
-	if err != nil {
-		return nil, err
+		// Get the new public keys (pem data) from google
+		req, _ := http.NewRequest("GET", "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com", nil)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		// The response contains multiple PEMs
+		decoder := json.NewDecoder(res.Body)
+		personMap := make(map[string]interface{})
+		err = decoder.Decode(&personMap)
+		if err != nil {
+			return nil, err
+		}
+
+		// Try to cache the values for next requests
+		reasons, expires, _ := cachecontrol.CachableResponse(req, res, cachecontrol.Options{})
+		if len(reasons) == 0 {
+			timeUntilExpiration := time.Until(expires)
+			log.Println("Caching public keys for: ", timeUntilExpiration)
+
+			// Save all the identities
+			for id, publicKeyData := range personMap {
+				myCache.Set(id, publicKeyData, timeUntilExpiration)
+			}
+		} else {
+			log.Println("Unable to cache public key:", reasons)
+		}
+
+		pemData = personMap[kid]
 	}
 
-	block, _ := pem.Decode([]byte(personMap[kid].(string)))
+	block, _ := pem.Decode([]byte(pemData.(string)))
 	var cert *x509.Certificate
 	cert, _ = x509.ParseCertificate(block.Bytes)
 	rsaPublicKey := cert.PublicKey.(*rsa.PublicKey)
