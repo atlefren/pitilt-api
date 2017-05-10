@@ -10,12 +10,12 @@ import (
 	"github.com/auth0/go-jwt-middleware"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/context"
-	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/patrickmn/go-cache"
 	"github.com/pquerna/cachecontrol"
+	"github.com/rs/cors"
 	"github.com/urfave/negroni"
 	"log"
 	"net/http"
@@ -314,18 +314,6 @@ func hello(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Pitilt :)\n")
 }
 
-func handle(r *mux.Router, method string, path string, handlerFunc func(w http.ResponseWriter, r *http.Request), middleware func(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc)) {
-
-	if middleware == nil {
-		r.HandleFunc(path, http.HandlerFunc(handlerFunc)).Methods(method)
-	} else {
-		r.Handle(path, negroni.New(
-			negroni.HandlerFunc(middleware),
-			negroni.Wrap(http.HandlerFunc(handlerFunc)),
-		)).Methods(method)
-	}
-}
-
 func main() {
 
 	var err error
@@ -343,9 +331,6 @@ func main() {
 	database := &Database{db: db}
 	env := &Env{db: database}
 
-	//create router
-	r := mux.NewRouter()
-
 	//create middleware for authing on google jwt from firebase
 	jwtMiddleware := jwtmiddleware.New(jwtmiddleware.Options{
 		ValidationKeyGetter: func(token *jwt.Token) (interface{}, error) {
@@ -355,36 +340,44 @@ func main() {
 		SigningMethod: jwt.SigningMethodRS256,
 	})
 
-	//create a securituhandler that handles both keys and jwt
-	securityHandler := &SecurityHandler{db: database, jwtMiddleware: jwtMiddleware}
+	jwtCheckHandler := &JwtCheckHandler{db: database, jwtMiddleware: jwtMiddleware}
+	keyCheckHandler := &KeyCheckHandler{db: database}
 
 	//define routes
-	handle(r, "GET", "/", hello, nil)
-	handle(r, "POST", "/measurements/", env.addMeasurements, securityHandler.KeyCheckHandler)
+	router := mux.NewRouter()
+	router.HandleFunc("/", hello).Methods("GET")
 
-	handle(r, "GET", "/plots/{plotId}/data/all/", env.getAllData, securityHandler.JwtCheckHandler)
-	handle(r, "GET", "/plots/{plotId}/data/latest/", env.getLatestData, securityHandler.JwtCheckHandler)
-	handle(r, "GET", "/plots/{plotId}/data/hourly/", env.getHourlyData, securityHandler.JwtCheckHandler)
+	measurementRouter := mux.NewRouter()
+	measurementRouter.HandleFunc("/measurements/", env.addMeasurements).Methods("POST")
+	router.PathPrefix("/measurements").Handler(negroni.New(
+		keyCheckHandler,
+		negroni.Wrap(measurementRouter),
+	))
 
-	handle(r, "GET", "/plots/", env.getPlots, securityHandler.JwtCheckHandler)
-	handle(r, "GET", "/plots/{plotId}", env.getPlot, securityHandler.JwtCheckHandler)
+	plotsRouter := mux.NewRouter()
+	plotsRouter.HandleFunc("/plots/{plotId}/data/all/", env.getAllData).Methods("GET")
+	plotsRouter.HandleFunc("/plots/{plotId}/data/latest/", env.getLatestData).Methods("GET")
+	plotsRouter.HandleFunc("/plots/{plotId}/data/hourly/", env.getHourlyData).Methods("GET")
 
-	handle(r, "POST", "/plots/", env.addPlot, securityHandler.JwtCheckHandler)
+	plotsRouter.HandleFunc("/plots/", env.getPlots).Methods("GET")
+	plotsRouter.HandleFunc("/plots/{plotId}", env.getPlot).Methods("GET")
+	plotsRouter.HandleFunc("/plots/", env.addPlot).Methods("POST")
 
-	//setup CORS-handling
-	corsObj := handlers.AllowedOrigins([]string{"*"})
-	headersOk := handlers.AllowedHeaders([]string{"Content-Type", "Authorization"})
-	methodsOk := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "OPTIONS"})
-	corsHandler := handlers.CORS(corsObj, headersOk, methodsOk)(r)
+	router.PathPrefix("/plots").Handler(negroni.New(
+		jwtCheckHandler,
+		negroni.Wrap(plotsRouter),
+	))
 
-	//setup server
-	s := &http.Server{
-		Addr:           ":8080",
-		Handler:        corsHandler,
-		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
-		MaxHeaderBytes: 1 << 20,
-	}
-	log.Fatal(s.ListenAndServe())
+	// Setup CORS-handling
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedHeaders: []string{"Content-Type", "Authorization"},
+		AllowedMethods: []string{"GET", "HEAD", "POST", "PUT", "OPTIONS"},
+	})
 
+	n := negroni.New()
+	n.Use(c)
+	n.UseHandler(router)
+
+	http.ListenAndServe(":8080", n)
 }

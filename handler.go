@@ -7,12 +7,16 @@ import (
 	"net/http"
 )
 
-type SecurityHandler struct {
+type KeyCheckHandler struct {
+	db *Database
+}
+
+type JwtCheckHandler struct {
 	db            *Database
 	jwtMiddleware *jwtmiddleware.JWTMiddleware
 }
 
-func (h *SecurityHandler) KeyCheckHandler(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+func (h *KeyCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 
 	key := r.Header.Get("X-PYTILT-KEY")
 	if key == "" {
@@ -29,7 +33,7 @@ func (h *SecurityHandler) KeyCheckHandler(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func (h *SecurityHandler) JwtCheckHandler(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+func (h *JwtCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	err := h.jwtMiddleware.CheckJWT(w, r)
 	if err == nil && next != nil {
 		claims := context.Get(r, "user").(*jwt.Token).Claims.(jwt.MapClaims)
