@@ -74,15 +74,15 @@ func getKey(kid string) (*rsa.PublicKey, error) {
 	return rsaPublicKey, nil
 }
 
-func parseMeasurements(r *http.Request) []Measurement {
+func parseMeasurements(r *http.Request) ([]Measurement, error) {
 	decoder := json.NewDecoder(r.Body)
 	var measurements []Measurement
 	err := decoder.Decode(&measurements)
 	if err != nil {
-		panic(err)
+		return measurements, err
 	}
 	defer r.Body.Close()
-	return measurements
+	return measurements, nil
 }
 
 func mapMeasurements(measurements []Measurement) []PlotData {
@@ -121,8 +121,13 @@ type Env struct {
 
 func (env *Env) addMeasurements(w http.ResponseWriter, r *http.Request) {
 	user := getUser(r)
-	measurements := parseMeasurements(r)
-	err := env.db.saveMeasurements(measurements, user)
+	measurements, err := parseMeasurements(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err = env.db.saveMeasurements(measurements, user)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
