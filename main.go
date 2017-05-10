@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/auth0/go-jwt-middleware"
@@ -110,8 +111,14 @@ func mapMeasurements(measurements []Measurement) []PlotData {
 	return plots
 }
 
-func getUser(r *http.Request) string {
-	return context.Get(r, "user").(string)
+func getUser(r *http.Request) (string, error) {
+	user := context.Get(r, "user")
+
+	if user == nil {
+		return "", errors.New("user not found in context")
+	}
+
+	return user.(string), nil
 	//return "CzWRnH3U5TUV4CLFniC4NfMyYlC3"
 
 }
@@ -121,7 +128,11 @@ type Env struct {
 }
 
 func (env *Env) addMeasurements(w http.ResponseWriter, r *http.Request) {
-	user := getUser(r)
+	user, err := getUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	measurements, err := parseMeasurements(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -138,7 +149,11 @@ func (env *Env) addMeasurements(w http.ResponseWriter, r *http.Request) {
 
 func (env *Env) getAllData(w http.ResponseWriter, r *http.Request) {
 
-	user := getUser(r)
+	user, err := getUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	vars := mux.Vars(r)
 	plotId, err := strconv.Atoi(vars["plotId"])
@@ -167,7 +182,11 @@ func (env *Env) getAllData(w http.ResponseWriter, r *http.Request) {
 
 func (env *Env) getHourlyData(w http.ResponseWriter, r *http.Request) {
 
-	user := getUser(r)
+	user, err := getUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	vars := mux.Vars(r)
 	plotId, err := strconv.Atoi(vars["plotId"])
@@ -194,7 +213,11 @@ func (env *Env) getHourlyData(w http.ResponseWriter, r *http.Request) {
 }
 
 func (env *Env) getLatestData(w http.ResponseWriter, r *http.Request) {
-	user := getUser(r)
+	user, err := getUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	vars := mux.Vars(r)
 	plotId, err := strconv.Atoi(vars["plotId"])
@@ -227,7 +250,11 @@ func (env *Env) getLatestData(w http.ResponseWriter, r *http.Request) {
 
 func (env *Env) getPlots(w http.ResponseWriter, r *http.Request) {
 
-	user := getUser(r)
+	user, err := getUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	plots, err := env.db.getPlots(user)
 	if err != nil {
@@ -241,7 +268,11 @@ func (env *Env) getPlots(w http.ResponseWriter, r *http.Request) {
 
 func (env *Env) getPlot(w http.ResponseWriter, r *http.Request) {
 
-	user := getUser(r)
+	user, err := getUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	vars := mux.Vars(r)
 	plotId, err := strconv.Atoi(vars["plotId"])
 
@@ -277,7 +308,11 @@ func parsePlot(r *http.Request) (Plot, error) {
 
 func (env *Env) addPlot(w http.ResponseWriter, r *http.Request) {
 
-	user := getUser(r)
+	user, err := getUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	plot, err := parsePlot(r)
 	if err != nil {
@@ -298,7 +333,11 @@ func (env *Env) addPlot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (env *Env) getKey(w http.ResponseWriter, r *http.Request) {
-	userId := getUser(r)
+	userId, err := getUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	key, err := env.db.getkeyForUser(userId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
