@@ -21,10 +21,10 @@ func (db *Database) readDataFromPlot(user string, plotId int) ([]Measurement, er
             instrument
             WHERE plot = $1
         )
-        SELECT m.name, m.type, m.value, m.timestamp 
-        FROM measurement m, plot p 
-        WHERE m.timestamp >= p.start_time 
-        AND(p.end_time is null OR m.timestamp <= p.end_time) 
+        SELECT m.name, m.type, m.value, m.timestamp
+        FROM measurement m, plot p
+        WHERE m.timestamp >= p.start_time
+        AND(p.end_time is null OR m.timestamp <= p.end_time)
         AND m.name IN (SELECT name from instruments)
         AND p.id = $1
         AND p.login = $2
@@ -37,23 +37,23 @@ func (db *Database) readDataFromPlot(user string, plotId int) ([]Measurement, er
 func (db *Database) readLatestDataFromPlot(user string, plotId int) ([]Measurement, error) {
 	measurements := []Measurement{}
 	var sql = `
-        WITH 
+        WITH
         instruments as (
             SELECT i.name AS names
             FROM instrument i
             WHERE plot = $1
         ),
         latest_measurement as (
-    
+
             SELECT max(m.timestamp) as timestamp
-            FROM measurement m, plot p 
-            WHERE m.timestamp >= p.start_time 
-            AND(p.end_time is null OR m.timestamp <= p.end_time) 
+            FROM measurement m, plot p
+            WHERE m.timestamp >= p.start_time
+            AND(p.end_time is null OR m.timestamp <= p.end_time)
             AND p.id = $1
         )
-        SELECT m.name, m.type, m.value, m.timestamp 
-        FROM measurement m, plot p 
-        WHERE m.timestamp >= p.start_time 
+        SELECT m.name, m.type, m.value, m.timestamp
+        FROM measurement m, plot p
+        WHERE m.timestamp >= p.start_time
         and m.timestamp = (select timestamp from latest_measurement)
         AND m.name IN (SELECT i.names from instruments i)
         AND p.id = $1
@@ -68,17 +68,17 @@ func (db *Database) readHourlyDataFromPlot(user string, plotId int) ([]Measureme
 	measurements := []Measurement{}
 	var sql = `
         WITH instruments as (
-            SELECT name AS names 
-            FROM instrument 
+            SELECT name AS names
+            FROM instrument
             WHERE plot = $1
         )
         SELECT
             m.name,
             m.type,
             round(cast(avg(value) as numeric),0) AS value,
-            m.timestamp::date::timestamp + make_interval(hours => DATE_PART('HOUR', m.timestamp)::integer) as timestamp 
-        FROM measurement m, plot p 
-        WHERE m.timestamp >= p.start_time 
+            m.timestamp::date::timestamp + make_interval(hours => DATE_PART('HOUR', m.timestamp)::integer) as timestamp
+        FROM measurement m, plot p
+        WHERE m.timestamp >= p.start_time
         AND m.name IN (SELECT i.names from instruments i)
         AND p.id = $1
         AND p.login = $2
