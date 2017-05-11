@@ -28,7 +28,7 @@ func (db *Database) readDataFromPlot(user string, plotId int) ([]Measurement, er
         AND m.key IN (SELECT key from instruments)
         AND p.id = $1
         AND p.login = $2
-        ORDER BY m.timestamp;
+        ORDER BY m.timestamp desc;
     `
 	err := db.db.Select(&measurements, sql, plotId, user)
 	return measurements, err
@@ -58,7 +58,7 @@ func (db *Database) readLatestDataFromPlot(user string, plotId int) ([]Measureme
         AND m.key IN (SELECT i.keys from instruments i)
         AND p.id = $1
         AND p.login = $2
-        ORDER BY m.timestamp;
+        ORDER BY m.timestamp desc;
     `
 	err := db.db.Select(&measurements, sql, plotId, user)
 	return measurements, err
@@ -82,7 +82,7 @@ func (db *Database) readHourlyDataFromPlot(user string, plotId int) ([]Measureme
         AND p.id = $1
         AND p.login = $2
         GROUP BY m.key, timestamp
-        ORDER BY timestamp;
+        ORDER BY timestamp desc;
     `
 	err := db.db.Select(&measurements, sql, plotId, user)
 	return measurements, err
