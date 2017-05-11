@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"github.com/auth0/go-jwt-middleware"
 	"github.com/dgrijalva/jwt-go"
-	"github.com/gorilla/context"
 	"net/http"
 )
 
@@ -28,7 +28,9 @@ func (h *KeyCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next
 		http.Error(w, err.Error(), http.StatusForbidden)
 	}
 	if err == nil && next != nil {
-		context.Set(r, "user", user)
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, "user", user)
+		r = r.WithContext(ctx)
 		next(w, r)
 	}
 }
@@ -36,7 +38,7 @@ func (h *KeyCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next
 func (h *JwtCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	err := h.jwtMiddleware.CheckJWT(w, r)
 	if err == nil && next != nil {
-		claims := context.Get(r, "user").(*jwt.Token).Claims.(jwt.MapClaims)
+		claims := r.Context().Value("user").(*jwt.Token).Claims.(jwt.MapClaims)
 		if claims["iss"] == "https://securetoken.google.com/pitilt-7a37c" && claims["aud"] == "pitilt-7a37c" {
 			userId := claims["user_id"].(string)
 			exists, err := h.db.userExists(userId)
@@ -46,7 +48,9 @@ func (h *JwtCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next
 			if !exists {
 				h.db.createUser(userId, claims["email"].(string), claims["name"].(string))
 			}
-			context.Set(r, "user", userId)
+			ctx := r.Context()
+			ctx = context.WithValue(ctx, "user", userId)
+			r = r.WithContext(ctx)
 			next(w, r)
 		} else {
 			http.Error(w, "key not valid", http.StatusUnauthorized)

@@ -11,7 +11,6 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/auth0/go-jwt-middleware"
 	"github.com/dgrijalva/jwt-go"
-	"github.com/gorilla/context"
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
@@ -112,15 +111,12 @@ func mapMeasurements(measurements []Measurement) []PlotData {
 }
 
 func getUser(r *http.Request) (string, error) {
-	user := context.Get(r, "user")
-
-	if user == nil {
+	user, ok := r.Context().Value("user").(string)
+	if !ok {
 		return "", errors.New("user not found in context")
 	}
 
-	return user.(string), nil
-	//return "CzWRnH3U5TUV4CLFniC4NfMyYlC3"
-
+	return user, nil
 }
 
 type Env struct {
