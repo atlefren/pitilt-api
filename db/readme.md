@@ -7,8 +7,11 @@
 
 ## Alembic
 
-source venv/scripts/activate
+cd /opt/alembic/
+
+source /opt/alembic/venv/scripts/activate
 alembic revision -m "init database"
+export DATABASE_URI=postgres://tilt:password@localhost:5432/tilt
 alembic upgrade head
 
 

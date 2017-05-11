@@ -96,7 +96,7 @@ func mapMeasurements(measurements []Measurement) []PlotData {
 			dates[measurement.Timestamp.Time] = plot
 		}
 		plot, ok := dates[measurement.Timestamp.Time]
-		plot.Values[measurement.Name] = measurement.Value
+		plot.Values[measurement.Key] = measurement.Value
 	}
 
 	var plots = []PlotData{}

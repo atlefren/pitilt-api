@@ -17,15 +17,15 @@ func (db *Database) readDataFromPlot(user string, plotId int) ([]Measurement, er
 	measurements := []Measurement{}
 	var sql = `
         WITH instruments as (
-            SELECT name FROM
+            SELECT key FROM
             instrument
             WHERE plot = $1
         )
-        SELECT m.name, m.type, m.value, m.timestamp
+        SELECT m.key, m.value, m.timestamp
         FROM measurement m, plot p
         WHERE m.timestamp >= p.start_time
         AND(p.end_time is null OR m.timestamp <= p.end_time)
-        AND m.name IN (SELECT name from instruments)
+        AND m.key IN (SELECT key from instruments)
         AND p.id = $1
         AND p.login = $2
         ORDER BY m.timestamp;
@@ -39,7 +39,7 @@ func (db *Database) readLatestDataFromPlot(user string, plotId int) ([]Measureme
 	var sql = `
         WITH
         instruments as (
-            SELECT i.name AS names
+            SELECT i.key AS keys
             FROM instrument i
             WHERE plot = $1
         ),
@@ -51,11 +51,11 @@ func (db *Database) readLatestDataFromPlot(user string, plotId int) ([]Measureme
             AND(p.end_time is null OR m.timestamp <= p.end_time)
             AND p.id = $1
         )
-        SELECT m.name, m.type, m.value, m.timestamp
+        SELECT m.key, m.value, m.timestamp
         FROM measurement m, plot p
         WHERE m.timestamp >= p.start_time
         and m.timestamp = (select timestamp from latest_measurement)
-        AND m.name IN (SELECT i.names from instruments i)
+        AND m.key IN (SELECT i.keys from instruments i)
         AND p.id = $1
         AND p.login = $2
         ORDER BY m.timestamp;
@@ -68,21 +68,20 @@ func (db *Database) readHourlyDataFromPlot(user string, plotId int) ([]Measureme
 	measurements := []Measurement{}
 	var sql = `
         WITH instruments as (
-            SELECT name AS names
+            SELECT key AS keys
             FROM instrument
             WHERE plot = $1
         )
         SELECT
-            m.name,
-            m.type,
+            m.key,
             round(cast(avg(value) as numeric),0) AS value,
             m.timestamp::date::timestamp + make_interval(hours => DATE_PART('HOUR', m.timestamp)::integer) as timestamp
         FROM measurement m, plot p
         WHERE m.timestamp >= p.start_time
-        AND m.name IN (SELECT i.names from instruments i)
+        AND m.key IN (SELECT i.keys from instruments i)
         AND p.id = $1
         AND p.login = $2
-        GROUP BY m.name, m.type, timestamp
+        GROUP BY m.key, timestamp
         ORDER BY timestamp;
     `
 	err := db.db.Select(&measurements, sql, plotId, user)
@@ -93,7 +92,7 @@ func (db *Database) readMeasurements(user string, name string) ([]Measurement, e
 	measurements := []Measurement{}
 
 	var sql = `
-        SELECT name, type, value, timestamp
+        SELECT key, value, timestamp
         FROM measurement
         WHERE name = $1
         AND login = $2
@@ -107,8 +106,8 @@ func (db *Database) readMeasurements(user string, name string) ([]Measurement, e
 func (db *Database) saveMeasurements(measurements []Measurement, user string) error {
 	tx := db.db.MustBegin()
 	var sql = `
-        INSERT INTO measurement (name, type, value, timestamp, login)
-        VALUES (:name, :type, :value, :timestamp, :login)
+        INSERT INTO measurement (key, value, timestamp, login)
+        VALUES (:key, :value, :timestamp, :login)
     `
 	for _, measurement := range measurements {
 		measurement.Login = user
@@ -140,7 +139,7 @@ func (db *Database) getInstruments(plotId int) ([]Instrument, error) {
 	instruments := []Instrument{}
 
 	var sql = `
-        SELECT id, name, type
+        SELECT key, id, name, type
         FROM instrument
         WHERE plot = $1
     `
@@ -182,8 +181,8 @@ func (db *Database) savePlot(plot Plot, user string) (Plot, error) {
 	tx := db.db.MustBegin()
 
 	var sql2 = `
-        INSERT INTO instrument (name, type, plot)
-        VALUES (:name, :type, :plot)
+        INSERT INTO instrument (key, name, type, plot)
+        VALUES (:key, :name, :type, :plot)
     `
 	for _, instrument := range plot.Instruments {
 		instrument.Plot = plot.Id

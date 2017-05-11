@@ -77,8 +77,7 @@ func (nt NullTime) MarshalJSON() ([]byte, error) {
 }
 
 type Measurement struct {
-	Name      string    `db:"name"`
-	Type      string    `db:"type"`
+	Key      string    `db:"key"`
 	Timestamp Timestamp `db:"timestamp"`
 	Value     float64   `db:"value"`
 	Login     string    `db:"login"`
@@ -88,6 +87,7 @@ type Instrument struct {
 	Id   int    `db:"id" json:"-"`
 	Name string `db:"name" json:"name"`
 	Type string `db:"type" json:"type"`
+	Key string  `db:"key" json:"key"`
 	Plot int    `db:"plot" json:"-"`
 }
 
