@@ -404,6 +404,14 @@ func main() {
 		negroni.Wrap(plotsRouter),
 	))
 
+	userRouter := mux.NewRouter()
+	userRouter.HandleFunc("/user/key/", env.getKey).Methods("GET")
+
+	router.PathPrefix("/user").Handler(negroni.New(
+		jwtCheckHandler,
+		negroni.Wrap(userRouter),
+	))
+
 	// Setup CORS-handling
 	c := cors.New(cors.Options{
 		AllowedOrigins: []string{"*"},
