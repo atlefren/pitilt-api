@@ -21,7 +21,7 @@ def upgrade():
             ALTER TABLE measurement DROP COLUMN type;
         ''')
         op.execute('''
-            ALTER TABLE measurement ADD COLUMN key varchar(255);
+            ALTER TABLE instrument ADD COLUMN key varchar(255);
         ''')
 
 
