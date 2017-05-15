@@ -17,10 +17,7 @@ depends_on = None
 
 
 def upgrade():
-        op.execute('''
-            UPDATE measurement SET key = name
-        ''')
-        op.execute('''
+    op.execute('''
             ALTER TABLE measurement DROP COLUMN name;
         ''')
 
