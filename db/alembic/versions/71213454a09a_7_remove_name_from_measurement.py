@@ -17,9 +17,7 @@ depends_on = None
 
 
 def upgrade():
-    op.execute('''
-            ALTER TABLE measurement DROP COLUMN name;
-        ''')
+    pass
 
 
 def downgrade():

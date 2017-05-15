@@ -18,7 +18,7 @@ depends_on = None
 
 def upgrade():
         op.execute('''
-        
+        ALTER TABLE measurement RENAME COLUMN name to key;
         ALTER TABLE measurement DROP COLUMN color;
         ALTER TABLE measurement DROP COLUMN gravity;
         ALTER TABLE measurement DROP COLUMN temperature;
