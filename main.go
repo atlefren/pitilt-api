@@ -235,6 +235,11 @@ func (env *Env) getLatestData(w http.ResponseWriter, r *http.Request) {
 
 	plots := mapMeasurements(measurements)
 
+	if len(plots) == 0 {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+
 	jsonData, err := json.Marshal(plots[0])
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

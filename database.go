@@ -125,7 +125,7 @@ func (db *Database) getPlots(user string) ([]Plot, error) {
 	plots := []Plot{}
 
 	var sql = `
-        SELECT id, start_time, end_time, name
+        SELECT id, start_time, end_time, name, case when end_time IS null then true else false end as active
         FROM plot
         WHERE login = $1
         ORDER BY start_time DESC
