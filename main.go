@@ -304,6 +304,11 @@ func parsePlot(r *http.Request) (Plot, error) {
 		return Plot{}, err
 	}
 	defer r.Body.Close()
+
+	if plot.EndTime != nil && !plot.StartTime.Before(*plot.EndTime) {
+		return Plot{}, errors.New("Invalid plot: start time must be before end time.")
+	}
+
 	return plot, nil
 }
 
@@ -317,7 +322,7 @@ func (env *Env) addPlot(w http.ResponseWriter, r *http.Request) {
 
 	plot, err := parsePlot(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
