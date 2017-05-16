@@ -2,6 +2,8 @@ import requests
 import json
 import time
 from datetime import datetime, timedelta
+from random import randint
+
 KEY = 'd9b2591e-e0be-4958-8d47-950927ebf64f'
 
 URL = 'http://localhost:8080'
@@ -34,6 +36,6 @@ if __name__ == '__main__':
     #send_measurement('temp', 1, 'gravity', 2)
 
     while True:
-        send_measurement('room_temp', 22, 'tilt_black_temp', 20, 'tilt_black_grav', 1080)
+        send_measurement('room_temp', randint(18, 25), 'tilt_black_temp', randint(19, 30), 'tilt_black_grav', randint(1010, 1090))
         time.sleep(10)
    
