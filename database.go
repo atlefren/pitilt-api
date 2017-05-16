@@ -152,7 +152,7 @@ func (db *Database) getPlot(id int, user string) (Plot, error) {
 	plot := Plot{}
 
 	var sql = `
-        SELECT id, start_time, end_time, name
+        SELECT id, start_time, end_time, name, case when end_time IS null then true else false end as active
         FROM plot
         WHERE login = $1
         AND id = $2
