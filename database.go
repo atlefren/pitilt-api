@@ -233,7 +233,7 @@ func (db *Database) createUser(id string, email string, name string) error {
 	tx := db.db.MustBegin()
 	key := uuid.New()
 	var sql = `
-        INSERT INTO login (id, first_name, email, key)
+        INSERT INTO login (id, name, email, key)
         VALUES ($1, $2, $3, $4)
     `
 	tx.MustExec(sql, id, name, email, key)

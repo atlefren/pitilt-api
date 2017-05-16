@@ -15,8 +15,8 @@
 ```cd db```
 ```vagrant up```
 ```vagrant ssh```
-```source  ~/venv/scripts/activate```
+```cd /vagrant/```
+```source /opt/alembic/venv/bin/activate```
 ```export DATABASE_URI=databaseuri```
-```cd /vagrant```
 ```alembic revision -m "N-message"```
 ```alembic upgrade head```
