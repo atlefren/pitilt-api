@@ -55,7 +55,7 @@ func getKey(kid string) (*rsa.PublicKey, error) {
 		reasons, expires, _ := cachecontrol.CachableResponse(req, res, cachecontrol.Options{})
 		if len(reasons) == 0 {
 			timeUntilExpiration := time.Until(expires)
-			log.WithFields(log.Fields{"timeUntilExpiry": timeUntilExpiration}).Info("Caching publice keys")
+			log.WithFields(log.Fields{"timeUntilExpiry": timeUntilExpiration}).Info("Caching public keys")
 
 			// Save all the identities
 			for id, publicKeyData := range personMap {
