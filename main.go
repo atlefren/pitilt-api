@@ -55,7 +55,7 @@ func getKey(kid string) (*rsa.PublicKey, error) {
 		reasons, expires, _ := cachecontrol.CachableResponse(req, res, cachecontrol.Options{})
 		if len(reasons) == 0 {
 			timeUntilExpiration := time.Until(expires)
-			log.WithFields(log.Fields{"timeUntilExpiry": timeUntilExpiration}).Info("Caching publice keys")
+			log.WithFields(log.Fields{"timeUntilExpiry": timeUntilExpiration}).Info("Caching public keys")
 
 			// Save all the identities
 			for id, publicKeyData := range personMap {
@@ -335,6 +335,41 @@ func (env *Env) addPlot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	w.Write(jsonData)
+}
+
+func (env *Env) updatePlot(w http.ResponseWriter, r *http.Request) {
+
+	user, err := getUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	plot, err := parsePlot(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Must use the id from the url, not the json
+	vars := mux.Vars(r)
+	plotId, err := strconv.Atoi(vars["plotId"])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	plot.Id = plotId
+
+	updated_plot, err := env.db.updatePlot(plot, user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonData, _ := json.Marshal(updated_plot)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
 
 }
 
@@ -408,6 +443,7 @@ func main() {
 	plotsRouter.HandleFunc("/plots/", env.getPlots).Methods("GET")
 	plotsRouter.HandleFunc("/plots/{plotId}", env.getPlot).Methods("GET")
 	plotsRouter.HandleFunc("/plots/", env.addPlot).Methods("POST")
+	plotsRouter.HandleFunc("/plots/{plotId}", env.updatePlot).Methods("PUT")
 
 	router.PathPrefix("/plots").Handler(negroni.New(
 		jwtCheckHandler,

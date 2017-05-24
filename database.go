@@ -192,6 +192,20 @@ func (db *Database) savePlot(plot Plot, user string) (Plot, error) {
 	return plot, err
 }
 
+func (db *Database) updatePlot(plot Plot, user string) (Plot, error) {
+
+	plot.Login = user
+
+	var sql = `
+        UPDATE plot SET start_time = :start_time, end_time = :end_time, name = :name WHERE id = :id and login = :login
+    `
+	_, err := db.db.NamedQuery(sql, plot)
+	if err != nil {
+		return plot, err
+	}
+	return plot, err
+}
+
 func (db *Database) getUser(r *http.Request) (string, error) {
 	key := r.Header.Get("X-PYTILT-KEY")
 	return db.getUserForKey(key)

@@ -70,7 +70,7 @@ type Plot struct {
 	StartTime   time.Time    `db:"start_time" json:"startTime"`
 	EndTime     *time.Time   `db:"end_time" json:"endTime,omitempty"`
 	Instruments []Instrument `json:"instruments,omitempty"`
-	Login       string       `db:"login" json:"_,omitempty"`
+	Login       string       `db:"login" json:"-"`
 	Active      bool         `db:"active" json:"active"`
 }
 
