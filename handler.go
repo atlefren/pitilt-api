@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	log "github.com/Sirupsen/logrus"
 	"github.com/auth0/go-jwt-middleware"
 	"github.com/dgrijalva/jwt-go"
 	"net/http"
@@ -43,12 +44,22 @@ func (h *JwtCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next
 			userId := claims["user_id"].(string)
 			exists, err := h.db.userExists(userId)
 			if err != nil {
+				log.WithFields(log.Fields{
+					"err":    err,
+					"userId": userId,
+					"email":  claims["email"].(string),
+				}).Error("Unable to check if user exists")
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 			if !exists {
 				err = h.db.createUser(userId, claims["email"].(string), claims["name"].(string))
 				if err != nil {
+					log.WithFields(log.Fields{
+						"err":    err,
+						"userId": userId,
+						"email":  claims["email"].(string),
+					}).Error("Unable to create user")
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
