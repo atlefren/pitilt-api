@@ -397,8 +397,6 @@ func hello(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
-	var err error
-
 	//setup database
 	var dbUri = os.Getenv("DATABASE_URI")
 	if dbUri == "" {
@@ -407,8 +405,14 @@ func main() {
 
 	db, err := sqlx.Open("postgres", dbUri)
 	if err != nil {
-		log.Fatalln(err)
+		log.WithFields(log.Fields{"err": err}).Warn("Unable to connect to database")
 	}
+
+	err = db.Ping()
+	if err != nil {
+		log.WithFields(log.Fields{"err": err}).Warn("Unable to ping database")
+	}
+
 	database := &Database{db: db}
 	env := &Env{db: database}
 

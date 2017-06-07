@@ -44,9 +44,14 @@ func (h *JwtCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next
 			exists, err := h.db.userExists(userId)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
 			}
 			if !exists {
-				h.db.createUser(userId, claims["email"].(string), claims["name"].(string))
+				err = h.db.createUser(userId, claims["email"].(string), claims["name"].(string))
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
 			}
 			ctx := r.Context()
 			ctx = context.WithValue(ctx, "user", userId)

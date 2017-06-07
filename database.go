@@ -2,10 +2,9 @@ package main
 
 import (
 	"database/sql"
-	"errors"
-	//"fmt"
 	"github.com/jmoiron/sqlx"
 	"github.com/pborman/uuid"
+	"github.com/pkg/errors"
 	"net/http"
 )
 
@@ -104,7 +103,11 @@ func (db *Database) readMeasurements(user string, name string) ([]Measurement, e
 }
 
 func (db *Database) saveMeasurements(measurements []Measurement, user string) error {
-	tx := db.db.MustBegin()
+	tx, err := db.db.Beginx()
+	if err != nil {
+		return errors.Wrap(err, "Unable to save measurement")
+	}
+
 	var sql = `
         INSERT INTO measurement (key, value, timestamp, login)
         VALUES (:key, :value, :timestamp, :login)
@@ -114,9 +117,9 @@ func (db *Database) saveMeasurements(measurements []Measurement, user string) er
 		tx.NamedExec(sql, &measurement)
 	}
 
-	err := tx.Commit()
+	err = tx.Commit()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Unable to save measurement")
 	}
 	return nil
 }
@@ -172,13 +175,16 @@ func (db *Database) savePlot(plot Plot, user string) (Plot, error) {
 	var id int
 	rows, err := db.db.NamedQuery(sql, plot)
 	if err != nil {
-		return plot, err
+		return plot, errors.Wrap(err, "Unable to save plot")
 	}
 	if rows.Next() {
 		rows.Scan(&id)
 	}
 	plot.Id = id
-	tx := db.db.MustBegin()
+	tx, err := db.db.Beginx()
+	if err != nil {
+		return plot, errors.Wrap(err, "Unable to save instruments for plot")
+	}
 
 	var sql2 = `
         INSERT INTO instrument (key, name, type, plot)
@@ -238,19 +244,27 @@ func (db *Database) userExists(id string) (bool, error) {
 	} else if err == sql.ErrNoRows {
 		return false, nil
 	} else {
-		return false, err
+		return false, errors.Wrap(err, "Unable to check if user exists")
 	}
 
 }
 
 func (db *Database) createUser(id string, email string, name string) error {
-	tx := db.db.MustBegin()
+	tx, error := db.db.Beginx()
+	if error != nil {
+		return errors.New("Unable to connect to database.")
+	}
+
 	key := uuid.New()
 	var sql = `
         INSERT INTO login (id, name, email, key)
         VALUES ($1, $2, $3, $4)
     `
-	tx.MustExec(sql, id, name, email, key)
+	_, error = tx.Exec(sql, id, name, email, key)
+	if error != nil {
+		return errors.New("Unable to create new user")
+	}
+
 	tx.Commit()
 	return nil
 }
