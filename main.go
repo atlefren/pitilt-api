@@ -119,6 +119,16 @@ func getUser(r *http.Request) (string, error) {
 	return user, nil
 }
 
+func getPlotId(r *http.Request) (int, error) {
+	vars := mux.Vars(r)
+	plotId, err := strconv.Atoi(vars["plotId"])
+	if err != nil {
+		return plotId, errors.New("Invalid plot id: " + vars["plotId"])
+	}
+
+	return plotId, err
+}
+
 type Env struct {
 	db *Database
 }
@@ -151,11 +161,9 @@ func (env *Env) getAllData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vars := mux.Vars(r)
-	plotId, err := strconv.Atoi(vars["plotId"])
-
+	plotId, err := getPlotId(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -184,11 +192,9 @@ func (env *Env) getHourlyData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vars := mux.Vars(r)
-	plotId, err := strconv.Atoi(vars["plotId"])
-
+	plotId, err := getPlotId(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -215,11 +221,9 @@ func (env *Env) getLatestData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vars := mux.Vars(r)
-	plotId, err := strconv.Atoi(vars["plotId"])
-
+	plotId, err := getPlotId(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -274,8 +278,12 @@ func (env *Env) getPlot(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	vars := mux.Vars(r)
-	plotId, err := strconv.Atoi(vars["plotId"])
+
+	plotId, err := getPlotId(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	plot, err := env.db.getPlot(plotId, user)
 	if err != nil {
@@ -352,8 +360,7 @@ func (env *Env) updatePlot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Must use the id from the url, not the json
-	vars := mux.Vars(r)
-	plotId, err := strconv.Atoi(vars["plotId"])
+	plotId, err := getPlotId(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
