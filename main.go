@@ -129,6 +129,28 @@ func getPlotId(r *http.Request) (int, error) {
 	return plotId, err
 }
 
+func parseDatetime(r *http.Request, key string, defaultValue time.Time) (time.Time, error) {
+	vars := r.URL.Query()
+	if vals, ok := vars[key]; ok {
+		// Expecting only one key for each date time
+		if len(vals) != 1 {
+			return defaultValue, errors.New("Multiple values for key: " + key)
+		}
+
+		// Key is present in request: try to parse it.
+		val := vals[0]
+		t, err := time.Parse(time.RFC3339, val)
+		if err != nil {
+			return defaultValue, errors.New("Invalid datetime (should be rfc3339): " + key + ": " + val)
+		}
+		return t, nil
+
+	} else {
+		// Key is not present in request: use default.
+		return defaultValue, nil
+	}
+}
+
 type Env struct {
 	db *Database
 }
@@ -167,7 +189,25 @@ func (env *Env) getAllData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	measurements, err := env.db.readDataFromPlot(user, plotId)
+	startTime, err := parseDatetime(r, "start", time.Time{})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	endTime, err := parseDatetime(r, "end", time.Now())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if endTime.Before(startTime) {
+		http.Error(w, "Incorrect interval: start time must be before end time.",
+			http.StatusBadRequest)
+		return
+	}
+
+	measurements, err := env.db.readDataFromPlot(user, plotId, startTime, endTime)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

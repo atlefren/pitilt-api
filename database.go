@@ -6,13 +6,14 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/pkg/errors"
 	"net/http"
+	"time"
 )
 
 type Database struct {
 	db *sqlx.DB
 }
 
-func (db *Database) readDataFromPlot(user string, plotId int) ([]Measurement, error) {
+func (db *Database) readDataFromPlot(user string, plotId int, startTime time.Time, endTime time.Time) ([]Measurement, error) {
 	measurements := []Measurement{}
 	var sql = `
         WITH instruments as (
@@ -27,9 +28,11 @@ func (db *Database) readDataFromPlot(user string, plotId int) ([]Measurement, er
         AND m.key IN (SELECT key from instruments)
         AND p.id = $1
         AND p.login = $2
+        AND m.timestamp >= $3
+        AND m.timestamp <= $4
         ORDER BY m.timestamp desc;
     `
-	err := db.db.Select(&measurements, sql, plotId, user)
+	err := db.db.Select(&measurements, sql, plotId, user, startTime, endTime)
 	return measurements, err
 }
 
