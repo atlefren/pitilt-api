@@ -191,7 +191,7 @@ func (env *Env) addMeasurements(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
-func (env *Env) getAllData(w http.ResponseWriter, r *http.Request) {
+func (env *Env) getPlotData(w http.ResponseWriter, r *http.Request) {
 
 	user, err := getUser(r)
 	if err != nil {
@@ -479,7 +479,7 @@ func main() {
 	))
 
 	plotsRouter := mux.NewRouter()
-	plotsRouter.HandleFunc("/plots/{plotId}/data/all/", env.getAllData).Methods("GET")
+	plotsRouter.HandleFunc("/plots/{plotId}/data/", env.getPlotData).Methods("GET")
 	plotsRouter.HandleFunc("/plots/{plotId}/data/latest/", env.getLatestData).Methods("GET")
 
 	plotsRouter.HandleFunc("/plots/", env.getPlots).Methods("GET")
