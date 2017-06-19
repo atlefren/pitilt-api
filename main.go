@@ -151,6 +151,22 @@ func parseDatetime(r *http.Request, key string, defaultValue time.Time) (time.Ti
 	}
 }
 
+func parseResolution(r *http.Request) (Resolution, error) {
+	vars := r.URL.Query()
+	if vals, ok := vars["resolution"]; ok {
+		// Expecting only one key for resolution
+		if len(vals) != 1 {
+			return All, errors.New("Multiple values for resolution")
+		}
+
+		// Key is present in request: try to parse it.
+		val := vals[0]
+		return ResolutionFromString(val)
+	} else {
+		return All, nil
+	}
+}
+
 type Env struct {
 	db *Database
 }
@@ -207,7 +223,13 @@ func (env *Env) getAllData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	measurements, err := env.db.readDataFromPlot(user, plotId, startTime, endTime)
+	resolution, err := parseResolution(r)
+	if err != nil {
+		http.Error(w, "Incorrect resolution.", http.StatusBadRequest)
+		return
+	}
+
+	measurements, err := env.db.readDataFromPlot(user, plotId, startTime, endTime, resolution)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -215,36 +237,6 @@ func (env *Env) getAllData(w http.ResponseWriter, r *http.Request) {
 
 	plots := mapMeasurements(measurements)
 
-	jsonData, err := json.Marshal(plots)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(jsonData)
-}
-
-func (env *Env) getHourlyData(w http.ResponseWriter, r *http.Request) {
-
-	user, err := getUser(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	plotId, err := getPlotId(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	measurements, err := env.db.readHourlyDataFromPlot(user, plotId)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	plots := mapMeasurements(measurements)
 	jsonData, err := json.Marshal(plots)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -489,7 +481,6 @@ func main() {
 	plotsRouter := mux.NewRouter()
 	plotsRouter.HandleFunc("/plots/{plotId}/data/all/", env.getAllData).Methods("GET")
 	plotsRouter.HandleFunc("/plots/{plotId}/data/latest/", env.getLatestData).Methods("GET")
-	plotsRouter.HandleFunc("/plots/{plotId}/data/hourly/", env.getHourlyData).Methods("GET")
 
 	plotsRouter.HandleFunc("/plots/", env.getPlots).Methods("GET")
 	plotsRouter.HandleFunc("/plots/{plotId}", env.getPlot).Methods("GET")

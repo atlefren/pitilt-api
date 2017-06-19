@@ -13,7 +13,59 @@ type Database struct {
 	db *sqlx.DB
 }
 
-func (db *Database) readDataFromPlot(user string, plotId int, startTime time.Time, endTime time.Time) ([]Measurement, error) {
+type Resolution int
+
+const (
+	All Resolution = iota
+	Day
+	Hour
+	Minute
+)
+
+func (resolution Resolution) ToString() (string, error) {
+	switch resolution {
+	case All:
+		return "All", nil
+	case Minute:
+		return "Minute", nil
+	case Hour:
+		return "Hour", nil
+	case Day:
+		return "Day", nil
+	default:
+		return "", errors.New("Unknown resolution")
+	}
+}
+
+func (resolution Resolution) String() string {
+	str, _ := resolution.ToString()
+	return str
+}
+
+func ResolutionFromString(resolutionString string) (Resolution, error) {
+	if resolutionString == "All" {
+		return All, nil
+	} else if resolutionString == "Minute" {
+		return Minute, nil
+	} else if resolutionString == "Hour" {
+		return Hour, nil
+	} else if resolutionString == "Day" {
+		return Day, nil
+	} else {
+		return All, errors.New("Unknown resolution from string: " + resolutionString)
+	}
+}
+
+func (db *Database) readDataFromPlot(user string, plotId int, startTime time.Time, endTime time.Time, resolution Resolution) ([]Measurement, error) {
+
+	if resolution == All {
+		return db.readAllDataFromPlot(user, plotId, startTime, endTime)
+	} else {
+		return db.readAggregatedDataFromPlot(user, plotId, startTime, endTime, resolution)
+	}
+}
+
+func (db *Database) readAllDataFromPlot(user string, plotId int, startTime time.Time, endTime time.Time) ([]Measurement, error) {
 	measurements := []Measurement{}
 	var sql = `
         WITH instruments as (
@@ -66,27 +118,57 @@ func (db *Database) readLatestDataFromPlot(user string, plotId int) ([]Measureme
 	return measurements, err
 }
 
-func (db *Database) readHourlyDataFromPlot(user string, plotId int) ([]Measurement, error) {
+func (db *Database) getIntervalDefinition(resolution Resolution) (string, string, error) {
+	switch resolution {
+	case All:
+		return "", "", errors.New("No interval definition for All")
+	case Minute:
+		return "mins", "1 minute", nil
+	case Hour:
+		return "hours", "1 hour", nil
+	case Day:
+		return "days", "1 day", nil
+	default:
+		return "", "", errors.New("Unknown resolution")
+	}
+}
+
+func (db *Database) readAggregatedDataFromPlot(user string, plotId int, startTime time.Time, endTime time.Time, resolution Resolution) ([]Measurement, error) {
 	measurements := []Measurement{}
 	var sql = `
         WITH instruments as (
             SELECT key AS keys
             FROM instrument
             WHERE plot = $1
+        ),
+        intervals AS (
+            SELECT start_time FROM
+            generate_series(date_trunc($5, (select start_time from plot where id = $1)), NOW(), $6) as start_time
         )
         SELECT
             m.key,
-            round(cast(avg(value) as numeric),0) AS value,
-            m.timestamp::date::timestamp + make_interval(hours => DATE_PART('HOUR', m.timestamp)::integer) as timestamp
-        FROM measurement m, plot p
+            i.start_time as timestamp,
+            AVG(m.value) as value
+        FROM measurement m, plot p, intervals i
         WHERE m.timestamp >= p.start_time
-        AND m.key IN (SELECT i.keys from instruments i)
+        AND(p.end_time is null OR m.timestamp <= p.end_time)
+        AND m.key IN (SELECT keys from instruments)
         AND p.id = $1
         AND p.login = $2
-        GROUP BY m.key, timestamp
-        ORDER BY timestamp desc;
+        AND m.timestamp > i.start_time
+        AND m.timestamp < i.start_time + $6::interval
+        AND m.timestamp >= $3
+        AND m.timestamp <= $4
+        GROUP BY m.key, i.start_time
+        ORDER BY i.start_time desc
     `
-	err := db.db.Select(&measurements, sql, plotId, user)
+
+	trunc, interval, err := db.getIntervalDefinition(resolution)
+	if err != nil {
+		return measurements, err
+	}
+
+	err = db.db.Select(&measurements, sql, plotId, user, startTime, endTime, trunc, interval)
 	return measurements, err
 }
 
