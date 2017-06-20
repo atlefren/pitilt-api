@@ -6,6 +6,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/pkg/errors"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -43,13 +44,14 @@ func (resolution Resolution) String() string {
 }
 
 func ResolutionFromString(resolutionString string) (Resolution, error) {
-	if resolutionString == "All" {
+	lowerCase := strings.ToLower(resolutionString)
+	if lowerCase == strings.ToLower("All") {
 		return All, nil
-	} else if resolutionString == "Minute" {
+	} else if lowerCase == strings.ToLower("Minute") {
 		return Minute, nil
-	} else if resolutionString == "Hour" {
+	} else if lowerCase == strings.ToLower("Hour") {
 		return Hour, nil
-	} else if resolutionString == "Day" {
+	} else if lowerCase == strings.ToLower("Day") {
 		return Day, nil
 	} else {
 		return All, errors.New("Unknown resolution from string: " + resolutionString)
