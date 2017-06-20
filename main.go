@@ -229,19 +229,37 @@ func (env *Env) getPlotData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	start := time.Now()
 	measurements, err := env.db.readDataFromPlot(user, plotId, startTime, endTime, resolution)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	dbReadTime := time.Since(start)
 
+	start = time.Now()
 	plots := mapMeasurements(measurements)
+	mappingTime := time.Since(start)
 
+	start = time.Now()
 	jsonData, err := json.Marshal(plots)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	jsonTime := time.Since(start)
+
+	log.WithFields(log.Fields{
+		"database-time": dbReadTime,
+		"map-time":      mappingTime,
+		"json-time":     jsonTime,
+		"user-id":       user,
+		"plot-id":       plotId,
+		"start-time":    startTime,
+		"end-time":      endTime,
+		"resolution":    resolution,
+	}).Info("Getting plot data")
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(jsonData)
 }
