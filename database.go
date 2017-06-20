@@ -145,7 +145,9 @@ func (db *Database) readAggregatedDataFromPlot(user string, plotId int, startTim
         ),
         intervals AS (
             SELECT start_time FROM
-            generate_series(date_trunc($5, (select start_time from plot where id = $1)), NOW(), $6) as start_time
+            generate_series(date_trunc($5, GREATEST($3, (select start_time from plot where id = $1))),
+                            LEAST($4, NOW()),
+                            $6) as start_time
         )
         SELECT
             m.key,
