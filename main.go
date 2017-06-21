@@ -290,17 +290,17 @@ func (env *Env) getLatestData(w http.ResponseWriter, r *http.Request) {
 	plots := mapMeasurements(measurements)
 
 	if len(plots) == 0 {
-		http.Error(w, "Not found", http.StatusNotFound)
-		return
+		// No content to display: have no data yet
+		w.WriteHeader(http.StatusNoContent)
+	} else {
+		jsonData, err := json.Marshal(plots[0])
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Write(jsonData)
+		w.Header().Set("Content-Type", "application/json")
 	}
-
-	jsonData, err := json.Marshal(plots[0])
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(jsonData)
 }
 
 func (env *Env) getPlots(w http.ResponseWriter, r *http.Request) {
