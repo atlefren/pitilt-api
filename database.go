@@ -152,7 +152,7 @@ func (db *Database) readAggregatedDataFromPlot(user string, plotId int, startTim
         SELECT
             m.key,
             i.start_time as timestamp,
-            AVG(m.value) as value
+            round(AVG(m.value)::numeric, 2) as value
         FROM measurement m, plot p, intervals i
         WHERE m.timestamp >= p.start_time
         AND(p.end_time is null OR m.timestamp <= p.end_time)
