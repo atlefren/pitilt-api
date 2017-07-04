@@ -17,6 +17,11 @@ type PlotData struct {
 	Values map[string]float64 `json:"values"`
 }
 
+type ShareLink struct {
+	PlotId int    `db:"plot_id" json:"-"`
+	Uuid   string `json:"uuid"`
+}
+
 func (t *Timestamp) MarshalJSON() ([]byte, error) {
 	ts := t.Time.Unix()
 	stamp := fmt.Sprint(ts)

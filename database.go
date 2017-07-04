@@ -357,3 +357,58 @@ func (db *Database) createUser(id string, email string, name string) error {
 	tx.Commit()
 	return nil
 }
+
+func (db *Database) addShareLink(plotId int, user string) (ShareLink, error) {
+	// TODO: check if user is allowed to view plot
+	shareLink := ShareLink{}
+
+	tx, error := db.db.Beginx()
+	if error != nil {
+		return shareLink, errors.New("Unable to connect to database.")
+	}
+
+	shareLink.PlotId = plotId
+	shareLink.Uuid = uuid.New()
+	var sql = `
+        INSERT INTO sharelink (plot_id, uuid)
+        VALUES ($1, $2)
+    `
+	_, error = tx.Exec(sql, shareLink.PlotId, shareLink.Uuid)
+	if error != nil {
+		return shareLink, errors.New("Unable to create share link")
+	}
+
+	tx.Commit()
+	return shareLink, nil
+}
+
+func (db *Database) getShareLink(plotId int, user string) (*ShareLink, error) {
+	// TODO: check if user is allowed to view plot
+
+	shareLink := ShareLink{}
+
+	var sqlSelect = `
+        SELECT plot_id, uuid
+        FROM sharelink
+        WHERE plot_id = $1
+    `
+
+	err := db.db.Get(&shareLink, sqlSelect, plotId)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+
+	return &shareLink, err
+}
+
+func (db *Database) removeShareLink(plotId int, user string) error {
+	// TODO: check if user is allowed to change plot
+
+	var sql = `
+        DELETE
+        FROM sharelink
+        WHERE plot_id = $1
+    `
+	_, err := db.db.Exec(sql, plotId)
+	return err
+}

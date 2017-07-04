@@ -430,6 +430,83 @@ func (env *Env) updatePlot(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func (env *Env) addShareLink(w http.ResponseWriter, r *http.Request) {
+
+	user, err := getUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	plotId, err := getPlotId(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	shareLink, err := env.db.addShareLink(plotId, user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonData, _ := json.Marshal(shareLink)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
+}
+
+func (env *Env) getShareLink(w http.ResponseWriter, r *http.Request) {
+	user, err := getUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	plotId, err := getPlotId(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	shareLink, err := env.db.getShareLink(plotId, user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if shareLink != nil {
+		jsonData, _ := json.Marshal(shareLink)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(jsonData)
+	} else {
+		w.WriteHeader(http.StatusNotFound)
+	}
+}
+
+func (env *Env) removeShareLink(w http.ResponseWriter, r *http.Request) {
+	user, err := getUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	plotId, err := getPlotId(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err = env.db.removeShareLink(plotId, user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (env *Env) getKey(w http.ResponseWriter, r *http.Request) {
 	userId, err := getUser(r)
 	if err != nil {
@@ -504,6 +581,10 @@ func main() {
 	plotsRouter.HandleFunc("/plots/{plotId}", env.getPlot).Methods("GET")
 	plotsRouter.HandleFunc("/plots/", env.addPlot).Methods("POST")
 	plotsRouter.HandleFunc("/plots/{plotId}", env.updatePlot).Methods("PUT")
+
+	plotsRouter.HandleFunc("/plots/{plotId}/sharelink/", env.getShareLink).Methods("GET")
+	plotsRouter.HandleFunc("/plots/{plotId}/sharelink/", env.addShareLink).Methods("POST")
+	plotsRouter.HandleFunc("/plots/{plotId}/sharelink/", env.removeShareLink).Methods("DELETE")
 
 	router.PathPrefix("/plots").Handler(negroni.New(
 		jwtCheckHandler,
