@@ -77,6 +77,7 @@ type Plot struct {
 	Instruments []Instrument `json:"instruments,omitempty"`
 	Login       string       `db:"login" json:"-"`
 	Active      bool         `db:"active" json:"active"`
+	ShareLink   *string      `json:"sharelink,omitempty"`
 }
 
 type User struct {

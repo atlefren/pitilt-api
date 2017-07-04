@@ -217,8 +217,10 @@ func (db *Database) getPlots(user string) ([]Plot, error) {
 	plots := []Plot{}
 
 	var sql = `
-        SELECT id, start_time, end_time, name, case when end_time IS null then true else false end as active
+        SELECT id, start_time, end_time, name, case when end_time IS null then true else false end as active, s.uuid as sharelink
         FROM plot
+        LEFT JOIN sharelink as s
+        ON plot.id = s.plot_id
         WHERE login = $1
         ORDER BY start_time DESC
     `
@@ -244,8 +246,10 @@ func (db *Database) getPlot(id int, user string) (Plot, error) {
 	plot := Plot{}
 
 	var sql = `
-        SELECT id, start_time, end_time, name, case when end_time IS null then true else false end as active
+        SELECT id, start_time, end_time, name, case when end_time IS null then true else false end as active, s.uuid as sharelink
         FROM plot
+        LEFT JOIN sharelink as s
+        ON plot.id = s.plot_id
         WHERE login = $1
         AND id = $2
     `
