@@ -129,6 +129,21 @@ func getPlotId(r *http.Request) (int, error) {
 	return plotId, err
 }
 
+func (env *Env) getShareLinkFromUuid(r *http.Request) (*ShareLink, error) {
+	vars := mux.Vars(r)
+	uuidString, found := vars["uuid"]
+	if !found {
+		return nil, errors.New("Uuid not found in request")
+	}
+
+	shareLink, err := env.db.getShareLinkFromUuid(uuidString)
+	return shareLink, err
+}
+
+func checkIfUserOwnsPlot(user string, plotId int, db *Database) (bool, error) {
+	return db.checkIfUserOwnsPlot(user, plotId)
+}
+
 func parseDatetime(r *http.Request, key string, defaultValue time.Time) (time.Time, error) {
 	vars := r.URL.Query()
 	if vals, ok := vars[key]; ok {
@@ -205,6 +220,24 @@ func (env *Env) getPlotData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Verify that user is allowed to see plot.
+	isOwner, err := checkIfUserOwnsPlot(user, plotId, env.db)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if !isOwner {
+		http.Error(w, "User is not allowed to view plot data",
+			http.StatusForbidden)
+		return
+	}
+
+	getPlotDataAndWriteResponse(w, r, env.db, plotId, user)
+}
+
+func getPlotDataAndWriteResponse(w http.ResponseWriter, r *http.Request, db *Database, plotId int, id string) {
+
 	startTime, err := parseDatetime(r, "start", time.Time{})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -230,7 +263,7 @@ func (env *Env) getPlotData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now()
-	measurements, err := env.db.readDataFromPlot(user, plotId, startTime, endTime, resolution)
+	measurements, err := db.readDataFromPlot(plotId, startTime, endTime, resolution)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -253,7 +286,7 @@ func (env *Env) getPlotData(w http.ResponseWriter, r *http.Request) {
 		"database-time": dbReadTime,
 		"map-time":      mappingTime,
 		"json-time":     jsonTime,
-		"user-id":       user,
+		"id":            id,
 		"plot-id":       plotId,
 		"start-time":    startTime,
 		"end-time":      endTime,
@@ -277,7 +310,26 @@ func (env *Env) getLatestData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	measurements, err := env.db.readLatestDataFromPlot(user, plotId)
+	// Verify that user is allowed to see plot.
+	isOwner, err := checkIfUserOwnsPlot(user, plotId, env.db)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if !isOwner {
+		http.Error(w, "User is not allowed to view plot data",
+			http.StatusForbidden)
+		return
+	}
+
+	getPlotLatestDataAndWriteResponse(w, r, env.db, plotId)
+}
+
+func getPlotLatestDataAndWriteResponse(w http.ResponseWriter, r *http.Request,
+	db *Database, plotId int) {
+
+	measurements, err := db.readLatestDataFromPlot(plotId)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Color not found", http.StatusNotFound)
@@ -322,7 +374,6 @@ func (env *Env) getPlots(w http.ResponseWriter, r *http.Request) {
 }
 
 func (env *Env) getPlot(w http.ResponseWriter, r *http.Request) {
-
 	user, err := getUser(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -335,7 +386,24 @@ func (env *Env) getPlot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plot, err := env.db.getPlot(plotId, user)
+	// Verify that user is allowed to see plot.
+	isOwner, err := checkIfUserOwnsPlot(user, plotId, env.db)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if !isOwner {
+		http.Error(w, "User is not allowed to view plot data",
+			http.StatusForbidden)
+		return
+	}
+
+	getPlotAndWriteResponse(w, env.db, plotId)
+}
+
+func getPlotAndWriteResponse(w http.ResponseWriter, db *Database, plotId int) {
+	plot, err := db.getPlot(plotId)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Plot not found", http.StatusNotFound)
@@ -345,7 +413,7 @@ func (env *Env) getPlot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	instruments, err := env.db.getInstruments(plotId)
+	instruments, err := db.getInstruments(plotId)
 	plot.Instruments = instruments
 
 	jsonData, err := json.Marshal(plot)
@@ -444,6 +512,19 @@ func (env *Env) addShareLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Verify that user is allowed to see plot.
+	isOwner, err := checkIfUserOwnsPlot(user, plotId, env.db)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if !isOwner {
+		http.Error(w, "User is not allowed to view plot",
+			http.StatusForbidden)
+		return
+	}
+
 	shareLink, err := env.db.addShareLink(plotId, user)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -466,6 +547,19 @@ func (env *Env) getShareLink(w http.ResponseWriter, r *http.Request) {
 	plotId, err := getPlotId(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Verify that user is allowed to see plot.
+	isOwner, err := checkIfUserOwnsPlot(user, plotId, env.db)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if !isOwner {
+		http.Error(w, "User is not allowed to view plot data",
+			http.StatusForbidden)
 		return
 	}
 
@@ -498,6 +592,19 @@ func (env *Env) removeShareLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Verify that user is allowed to see plot.
+	isOwner, err := checkIfUserOwnsPlot(user, plotId, env.db)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if !isOwner {
+		http.Error(w, "User is not allowed to view plot data",
+			http.StatusForbidden)
+		return
+	}
+
 	err = env.db.removeShareLink(plotId, user)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -505,6 +612,55 @@ func (env *Env) removeShareLink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (env *Env) getSharedPlot(w http.ResponseWriter, r *http.Request) {
+	shareLink, err := env.getShareLinkFromUuid(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if shareLink == nil {
+		http.Error(w, "No plot found for share link",
+			http.StatusNotFound)
+		return
+	}
+
+	getPlotAndWriteResponse(w, env.db, shareLink.PlotId)
+}
+
+func (env *Env) getSharedPlotData(w http.ResponseWriter, r *http.Request) {
+	shareLink, err := env.getShareLinkFromUuid(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if shareLink == nil {
+		http.Error(w, "No plot data found for share link",
+			http.StatusNotFound)
+		return
+	}
+
+	getPlotDataAndWriteResponse(w, r, env.db, shareLink.PlotId,
+		shareLink.Uuid)
+}
+
+func (env *Env) getSharedPlotLatestData(w http.ResponseWriter, r *http.Request) {
+	shareLink, err := env.getShareLinkFromUuid(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if shareLink == nil {
+		http.Error(w, "No plot data found for share link",
+			http.StatusNotFound)
+		return
+	}
+
+	getPlotLatestDataAndWriteResponse(w, r, env.db, shareLink.PlotId)
 }
 
 func (env *Env) getKey(w http.ResponseWriter, r *http.Request) {
@@ -585,10 +741,17 @@ func main() {
 	plotsRouter.HandleFunc("/plots/{plotId}/sharelink/", env.getShareLink).Methods("GET")
 	plotsRouter.HandleFunc("/plots/{plotId}/sharelink/", env.addShareLink).Methods("POST")
 	plotsRouter.HandleFunc("/plots/{plotId}/sharelink/", env.removeShareLink).Methods("DELETE")
-
 	router.PathPrefix("/plots").Handler(negroni.New(
 		jwtCheckHandler,
 		negroni.Wrap(plotsRouter),
+	))
+
+	sharedLinkRouter := mux.NewRouter()
+	sharedLinkRouter.HandleFunc("/sharedplots/{uuid}/", env.getSharedPlot).Methods("GET")
+	sharedLinkRouter.HandleFunc("/sharedplots/{uuid}/data/", env.getSharedPlotData).Methods("GET")
+	sharedLinkRouter.HandleFunc("/sharedplots/{uuid}/data/latest/", env.getSharedPlotLatestData).Methods("GET")
+	router.PathPrefix("/sharedplots").Handler(negroni.New(
+		negroni.Wrap(sharedLinkRouter),
 	))
 
 	userRouter := mux.NewRouter()

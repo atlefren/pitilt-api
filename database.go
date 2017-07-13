@@ -58,16 +58,16 @@ func ResolutionFromString(resolutionString string) (Resolution, error) {
 	}
 }
 
-func (db *Database) readDataFromPlot(user string, plotId int, startTime time.Time, endTime time.Time, resolution Resolution) ([]Measurement, error) {
+func (db *Database) readDataFromPlot(plotId int, startTime time.Time, endTime time.Time, resolution Resolution) ([]Measurement, error) {
 
 	if resolution == All {
-		return db.readAllDataFromPlot(user, plotId, startTime, endTime)
+		return db.readAllDataFromPlot(plotId, startTime, endTime)
 	} else {
-		return db.readAggregatedDataFromPlot(user, plotId, startTime, endTime, resolution)
+		return db.readAggregatedDataFromPlot(plotId, startTime, endTime, resolution)
 	}
 }
 
-func (db *Database) readAllDataFromPlot(user string, plotId int, startTime time.Time, endTime time.Time) ([]Measurement, error) {
+func (db *Database) readAllDataFromPlot(plotId int, startTime time.Time, endTime time.Time) ([]Measurement, error) {
 	measurements := []Measurement{}
 	var sql = `
         WITH instruments as (
@@ -81,16 +81,15 @@ func (db *Database) readAllDataFromPlot(user string, plotId int, startTime time.
         AND(p.end_time is null OR m.timestamp <= p.end_time)
         AND m.key IN (SELECT key from instruments)
         AND p.id = $1
-        AND p.login = $2
-        AND m.timestamp >= $3
-        AND m.timestamp <= $4
+        AND m.timestamp >= $2
+        AND m.timestamp <= $3
         ORDER BY m.timestamp desc;
     `
-	err := db.db.Select(&measurements, sql, plotId, user, startTime, endTime)
+	err := db.db.Select(&measurements, sql, plotId, startTime, endTime)
 	return measurements, err
 }
 
-func (db *Database) readLatestDataFromPlot(user string, plotId int) ([]Measurement, error) {
+func (db *Database) readLatestDataFromPlot(plotId int) ([]Measurement, error) {
 	measurements := []Measurement{}
 	var sql = `
         WITH
@@ -113,10 +112,9 @@ func (db *Database) readLatestDataFromPlot(user string, plotId int) ([]Measureme
         and m.timestamp = (select timestamp from latest_measurement)
         AND m.key IN (SELECT i.keys from instruments i)
         AND p.id = $1
-        AND p.login = $2
         ORDER BY m.timestamp desc;
     `
-	err := db.db.Select(&measurements, sql, plotId, user)
+	err := db.db.Select(&measurements, sql, plotId)
 	return measurements, err
 }
 
@@ -135,7 +133,7 @@ func (db *Database) getIntervalDefinition(resolution Resolution) (string, string
 	}
 }
 
-func (db *Database) readAggregatedDataFromPlot(user string, plotId int, startTime time.Time, endTime time.Time, resolution Resolution) ([]Measurement, error) {
+func (db *Database) readAggregatedDataFromPlot(plotId int, startTime time.Time, endTime time.Time, resolution Resolution) ([]Measurement, error) {
 	measurements := []Measurement{}
 	var sql = `
         WITH instruments as (
@@ -145,9 +143,9 @@ func (db *Database) readAggregatedDataFromPlot(user string, plotId int, startTim
         ),
         intervals AS (
             SELECT start_time FROM
-            generate_series(date_trunc($5, GREATEST($3, (select start_time from plot where id = $1))),
-                            LEAST($4, NOW()),
-                            $6) as start_time
+            generate_series(date_trunc($4, GREATEST($2, (select start_time from plot where id = $1))),
+                            LEAST($3, NOW()),
+                            $5) as start_time
         )
         SELECT
             m.key,
@@ -158,11 +156,10 @@ func (db *Database) readAggregatedDataFromPlot(user string, plotId int, startTim
         AND(p.end_time is null OR m.timestamp <= p.end_time)
         AND m.key IN (SELECT keys from instruments)
         AND p.id = $1
-        AND p.login = $2
         AND m.timestamp > i.start_time
-        AND m.timestamp < i.start_time + $6::interval
-        AND m.timestamp >= $3
-        AND m.timestamp <= $4
+        AND m.timestamp < i.start_time + $5::interval
+        AND m.timestamp >= $2
+        AND m.timestamp <= $3
         GROUP BY m.key, i.start_time
         ORDER BY i.start_time desc
     `
@@ -172,7 +169,7 @@ func (db *Database) readAggregatedDataFromPlot(user string, plotId int, startTim
 		return measurements, err
 	}
 
-	err = db.db.Select(&measurements, sql, plotId, user, startTime, endTime, trunc, interval)
+	err = db.db.Select(&measurements, sql, plotId, startTime, endTime, trunc, interval)
 	return measurements, err
 }
 
@@ -242,7 +239,7 @@ func (db *Database) getInstruments(plotId int) ([]Instrument, error) {
 	return instruments, err
 }
 
-func (db *Database) getPlot(id int, user string) (Plot, error) {
+func (db *Database) getPlot(id int) (Plot, error) {
 	plot := Plot{}
 
 	var sql = `
@@ -250,11 +247,10 @@ func (db *Database) getPlot(id int, user string) (Plot, error) {
         FROM plot
         LEFT JOIN sharelink as s
         ON plot.id = s.plot_id
-        WHERE login = $1
-        AND id = $2
+        WHERE id = $1
     `
 
-	err := db.db.Get(&plot, sql, user, id)
+	err := db.db.Get(&plot, sql, id)
 	return plot, err
 }
 
@@ -320,6 +316,19 @@ func (db *Database) getUserForKey(key string) (string, error) {
 	return id, err
 }
 
+func (db *Database) checkIfUserOwnsPlot(user string, plotId int) (bool, error) {
+	var count int
+	err := db.db.Get(&count, "SELECT COUNT(*) FROM plot WHERE login = $1 AND id = $2", user, plotId)
+
+	if err == sql.ErrNoRows {
+		// No plot with this combination of owner and id exists
+		return false, nil
+	}
+
+	// There should be only one plot
+	return count == 1, err
+}
+
 func (db *Database) getkeyForUser(user string) (string, error) {
 	var key string
 	err := db.db.Get(&key, "SELECT key FROM login WHERE id = $1", user)
@@ -363,7 +372,6 @@ func (db *Database) createUser(id string, email string, name string) error {
 }
 
 func (db *Database) addShareLink(plotId int, user string) (ShareLink, error) {
-	// TODO: check if user is allowed to view plot
 	shareLink := ShareLink{}
 
 	tx, error := db.db.Beginx()
@@ -387,8 +395,6 @@ func (db *Database) addShareLink(plotId int, user string) (ShareLink, error) {
 }
 
 func (db *Database) getShareLink(plotId int, user string) (*ShareLink, error) {
-	// TODO: check if user is allowed to view plot
-
 	shareLink := ShareLink{}
 
 	var sqlSelect = `
@@ -406,8 +412,6 @@ func (db *Database) getShareLink(plotId int, user string) (*ShareLink, error) {
 }
 
 func (db *Database) removeShareLink(plotId int, user string) error {
-	// TODO: check if user is allowed to change plot
-
 	var sql = `
         DELETE
         FROM sharelink
@@ -415,4 +419,27 @@ func (db *Database) removeShareLink(plotId int, user string) error {
     `
 	_, err := db.db.Exec(sql, plotId)
 	return err
+}
+
+func (db *Database) getShareLinkFromUuid(uuidString string) (*ShareLink, error) {
+	// Verify uuid format
+	parsedUuid := uuid.Parse(uuidString)
+	if parsedUuid == nil {
+		return nil, errors.New("Invalid uuid format")
+	}
+
+	shareLink := ShareLink{}
+
+	var sqlSelect = `
+        SELECT plot_id, uuid
+        FROM sharelink
+        WHERE uuid = $1
+    `
+
+	err := db.db.Get(&shareLink, sqlSelect, uuidString)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+
+	return &shareLink, err
 }
